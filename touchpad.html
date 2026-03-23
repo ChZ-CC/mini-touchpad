@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手机触控板</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            background: #111;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #touch-area {
+            flex: 1;
+            width: 100%;
+        }
+
+        #control-buttons {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px;
+            background: #222;
+        }
+
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #333;
+            color: white;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-btn:active {
+            background: #555;
+        }
+
+        /* 隐藏滚动条 */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="touch-area"></div>
+
+    <div id="control-buttons">
+        <button class="control-btn" id="left-click">左键</button>
+        <button class="control-btn" id="right-click">右键</button>
+        <button class="control-btn" id="long-press">长按</button>
+    </div>
+
+    <script>
+        // 连接电脑的WebSocket服务（使用当前页面的IP地址）
+        const ws = new WebSocket('ws://' + window.location.hostname + ':9877');
+
+        let lastX = 0, lastY = 0;
+        let startX = 0, startY = 0;
+        let isDragging = false;
+        const touchArea = document.getElementById('touch-area');
+        // 设置鼠标移动速度（数值越小越灵敏）
+        const MOUSE_SPEED = 3.0;
+        // 点击阈值（像素）
+        const CLICK_THRESHOLD = 1;
+
+        // WebSocket连接状态
+        ws.onopen = () => {
+            console.log('WebSocket连接成功');
+            alert('连接成功！现在可以使用触控板了');
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket连接关闭');
+        };
+
+        // 监听触摸开始事件
+        touchArea.addEventListener('touchstart', (e) => {
+            console.log('触摸开始', e.touches[0]);
+            e.preventDefault(); // 阻止默认滑动（如页面缩放）
+            const touch = e.touches[0];
+            startX = touch.clientX;
+            startY = touch.clientY;
+            lastX = touch.clientX;
+            lastY = touch.clientY;
+            isDragging = false;
+        });
+
+        // 消息合并和节流
+        let moveTimer = null;
+        let accumulatedDx = 0;
+        let accumulatedDy = 0;
+
+        // 监听触摸滑动事件
+        touchArea.addEventListener('touchmove', (e) => {
+            // console.log('触摸滑动', e.touches[0]);
+            e.preventDefault();
+            const touch = e.touches[0];
+            // 计算偏移量（乘以系数调整灵敏度）
+            const dx = (touch.clientX - lastX) * MOUSE_SPEED;
+            const dy = (touch.clientY - lastY) * MOUSE_SPEED;
+
+            // 检查是否超过点击阈值
+            const distance = Math.sqrt(
+                Math.pow(touch.clientX - startX, 2) +
+                Math.pow(touch.clientY - startY, 2)
+            );
+
+            if (distance > CLICK_THRESHOLD) {
+                isDragging = true;
+            }
+
+            // 累积移动量
+            accumulatedDx += dx;
+            accumulatedDy += dy;
+
+            // 清除之前的定时器
+            if (moveTimer) {
+                clearTimeout(moveTimer);
+            }
+
+            // 设置新的定时器，16ms发送一次合并后的消息（约60fps）
+            moveTimer = setTimeout(() => {
+                if (Math.abs(accumulatedDx) > 0 || Math.abs(accumulatedDy) > 0) {
+                    // 发送合并后的鼠标移动指令
+                    const data = { type: 'move', dx: accumulatedDx, dy: accumulatedDy };
+                    // 发送数据
+                    ws.send(JSON.stringify(data));
+                    // 重置累积量
+                    accumulatedDx = 0;
+                    accumulatedDy = 0;
+                }
+            }, 16);
+
+            // 更新上次坐标
+            lastX = touch.clientX;
+            lastY = touch.clientY;
+        });
+
+        // 监听触摸结束事件
+        touchArea.addEventListener('touchend', (e) => {
+            console.log('触摸结束');
+            e.preventDefault();
+
+            // 检查是否是点击（移动距离小于阈值）
+            const distance = Math.sqrt(
+                Math.pow(lastX - startX, 2) +
+                Math.pow(lastY - startY, 2)
+            );
+
+            if (!isDragging && distance <= CLICK_THRESHOLD) {
+                // 是点击操作
+                console.log('执行点击操作');
+                // 模拟点击：按下后立即抬起
+                const downData = { type: 'left_down' };
+                const upData = { type: 'left_up' };
+                ws.send(JSON.stringify(downData));
+                // 短暂延迟后发送抬起指令
+                setTimeout(() => {
+                    ws.send(JSON.stringify(upData));
+                }, 50);
+            }
+        });
+
+        // 监听WebSocket连接错误
+        ws.onerror = (error) => {
+            console.error('WebSocket错误:', error);
+            alert('连接失败！请检查：\n1. 电脑和手机同WiFi\n2. 电脑IP填写正确\n3. 服务已启动');
+        };
+
+        // 控制按钮事件处理
+        document.getElementById('left-click').addEventListener('click', () => {
+            console.log('执行左键点击');
+            const downData = { type: 'left_down' };
+            const upData = { type: 'left_up' };
+            ws.send(JSON.stringify(downData));
+            setTimeout(() => {
+                ws.send(JSON.stringify(upData));
+            }, 50);
+        });
+
+        document.getElementById('right-click').addEventListener('click', () => {
+            console.log('执行右键点击');
+            const downData = { type: 'right_down' };
+            const upData = { type: 'right_up' };
+            ws.send(JSON.stringify(downData));
+            setTimeout(() => {
+                ws.send(JSON.stringify(upData));
+            }, 50);
+        });
+
+        // 长按功能
+        let longPressTimer = null;
+        const longPressButton = document.getElementById('long-press');
+
+        longPressButton.addEventListener('mousedown', () => {
+            console.log('开始长按');
+            const downData = { type: 'left_down' };
+            ws.send(JSON.stringify(downData));
+
+            // 清除之前的定时器
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+            }
+        });
+
+        longPressButton.addEventListener('mouseup', () => {
+            console.log('结束长按');
+            const upData = { type: 'left_up' };
+            ws.send(JSON.stringify(upData));
+        });
+
+        // 触摸事件支持
+        longPressButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            console.log('开始长按（触摸）');
+            const downData = { type: 'left_down' };
+            ws.send(JSON.stringify(downData));
+        });
+
+        longPressButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            console.log('结束长按（触摸）');
+            const upData = { type: 'left_up' };
+            ws.send(JSON.stringify(upData));
+        });
+    </script>
+</body>
+
+</html>
