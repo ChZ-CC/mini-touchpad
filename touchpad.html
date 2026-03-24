@@ -61,6 +61,15 @@
     </div>
 
     <script>
+        // 指令常量
+        const CMD = {
+            MOVE: 'move:',
+            LEFT_DOWN: 'left_down:',
+            LEFT_UP: 'left_up:',
+            RIGHT_DOWN: 'right_down:',
+            RIGHT_UP: 'right_up:'
+        };
+
         // 连接电脑的WebSocket服务（使用当前页面的IP地址）
         const ws = new WebSocket('ws://' + window.location.hostname + ':9877');
 
@@ -132,9 +141,9 @@
             moveTimer = setTimeout(() => {
                 if (Math.abs(accumulatedDx) > 0 || Math.abs(accumulatedDy) > 0) {
                     // 发送合并后的鼠标移动指令
-                    const data = { type: 'move', dx: accumulatedDx, dy: accumulatedDy };
+                    const moveCommand = CMD.MOVE + `${accumulatedDx},${accumulatedDy}`;
                     // 发送数据
-                    ws.send(JSON.stringify(data));
+                    ws.send(moveCommand);
                     // 重置累积量
                     accumulatedDx = 0;
                     accumulatedDy = 0;
@@ -161,12 +170,10 @@
                 // 是点击操作
                 console.log('执行点击操作');
                 // 模拟点击：按下后立即抬起
-                const downData = { type: 'left_down' };
-                const upData = { type: 'left_up' };
-                ws.send(JSON.stringify(downData));
+                ws.send(CMD.LEFT_DOWN);
                 // 短暂延迟后发送抬起指令
                 setTimeout(() => {
-                    ws.send(JSON.stringify(upData));
+                    ws.send(CMD.LEFT_UP);
                 }, 50);
             }
         });
@@ -180,21 +187,17 @@
         // 控制按钮事件处理
         document.getElementById('left-click').addEventListener('click', () => {
             console.log('执行左键点击');
-            const downData = { type: 'left_down' };
-            const upData = { type: 'left_up' };
-            ws.send(JSON.stringify(downData));
+            ws.send(CMD.LEFT_DOWN);
             setTimeout(() => {
-                ws.send(JSON.stringify(upData));
+                ws.send(CMD.LEFT_UP);
             }, 50);
         });
 
         document.getElementById('right-click').addEventListener('click', () => {
             console.log('执行右键点击');
-            const downData = { type: 'right_down' };
-            const upData = { type: 'right_up' };
-            ws.send(JSON.stringify(downData));
+            ws.send(CMD.RIGHT_DOWN);
             setTimeout(() => {
-                ws.send(JSON.stringify(upData));
+                ws.send(CMD.RIGHT_UP);
             }, 50);
         });
 
@@ -204,8 +207,7 @@
 
         longPressButton.addEventListener('mousedown', () => {
             console.log('开始长按');
-            const downData = { type: 'left_down' };
-            ws.send(JSON.stringify(downData));
+            ws.send(CMD.LEFT_DOWN);
 
             // 清除之前的定时器
             if (longPressTimer) {
@@ -215,23 +217,20 @@
 
         longPressButton.addEventListener('mouseup', () => {
             console.log('结束长按');
-            const upData = { type: 'left_up' };
-            ws.send(JSON.stringify(upData));
+            ws.send(CMD.LEFT_UP);
         });
 
         // 触摸事件支持
         longPressButton.addEventListener('touchstart', (e) => {
             e.preventDefault();
             console.log('开始长按（触摸）');
-            const downData = { type: 'left_down' };
-            ws.send(JSON.stringify(downData));
+            ws.send(CMD.LEFT_DOWN);
         });
 
         longPressButton.addEventListener('touchend', (e) => {
             e.preventDefault();
             console.log('结束长按（触摸）');
-            const upData = { type: 'left_up' };
-            ws.send(JSON.stringify(upData));
+            ws.send(CMD.LEFT_UP);
         });
     </script>
 </body>

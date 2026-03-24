@@ -4,7 +4,13 @@ import pyautogui
 import os
 import dotenv
 
-dotenv.load_dotenv()
+# 指令常量
+CMD_MOVE = "move"
+CMD_LEFT_DOWN = "left_down"
+CMD_LEFT_UP = "left_up"
+CMD_RIGHT_DOWN = "right_down"
+CMD_RIGHT_UP = "right_up"
+
 # 禁用PyAutoGUI的防误触保护（加快响应）
 pyautogui.FAILSAFE = False
 
@@ -31,34 +37,71 @@ HTML_PAGE = HTML_PAGE.replace(
     '"websocket_port": 9877', f'"websocket_port": {WEBSOCKET_PORT}'
 )
 
+# 心跳超时时间（如 30 秒）
+PING_INTERVAL = 30
+PING_TIMEOUT = 10
+
+
+# 启动心跳任务
+async def ping_keep_alive(websocket):
+    try:
+        while True:
+            await asyncio.sleep(PING_INTERVAL)
+            # 发送 ping 帧（websockets 库自动处理）
+            await websocket.ping()
+            # 等待 pong 响应，超时则断开
+            await asyncio.wait_for(websocket.ensure_open(), timeout=PING_TIMEOUT)
+    except asyncio.TimeoutError:
+        print("心跳超时，关闭连接")
+        await websocket.close(code=1000, reason="ping timeout")
+
 
 # 处理WebSocket消息的核心函数
 async def handle_message(websocket):
+    # 启动心跳任务
+    ping_task = asyncio.create_task(ping_keep_alive(websocket))
     try:
         async for message in websocket:
+            # 解析手机发来的字符串指令
             try:
-                # 解析手机发来的JSON指令
-                data = eval(message)  # 简化处理，生产环境建议用json.loads
-                if data["type"] == "move":
+                if message == "ping":
+                    # 处理心跳消息
+                    await websocket.send("pong")
+                    return
+
+                # 解析指令格式：cmd:arg1,arg2
+                parts = message.split(":")
+                cmd = parts[0]
+                args = parts[1].split(",") if len(parts) > 1 else []
+
+                if cmd == CMD_MOVE and len(args) == 2:
                     # 移动鼠标（相对当前位置）
-                    pyautogui.moveRel(data["dx"], data["dy"], duration=0)
-                elif data["type"] == "left_down":
+                    dx = float(args[0])
+                    dy = float(args[1])
+                    pyautogui.moveRel(dx, dy, duration=0)
+                elif cmd == CMD_LEFT_DOWN:
                     # 鼠标左键按下
                     pyautogui.mouseDown(button="left")
-                elif data["type"] == "left_up":
+                elif cmd == CMD_LEFT_UP:
                     # 鼠标左键抬起
                     pyautogui.mouseUp(button="left")
-                elif data["type"] == "right_down":
+                elif cmd == CMD_RIGHT_DOWN:
                     # 鼠标右键按下
                     pyautogui.mouseDown(button="right")
-                elif data["type"] == "right_up":
+                elif cmd == CMD_RIGHT_UP:
                     # 鼠标右键抬起
                     pyautogui.mouseUp(button="right")
             except Exception as e:
-                print(f"处理指令出错：{e}")
-    except Exception as e:
-        # 忽略连接断开错误，避免控制台被错误信息刷屏
-        pass
+                print(f"解析指令出错：{e}")
+    except websockets.exceptions.ConnectionClosedError:
+        print("连接异常关闭")
+    finally:
+        # 取消心跳任务
+        ping_task.cancel()
+        try:
+            await ping_task
+        except asyncio.CancelledError:
+            pass
 
 
 # 启动WebSocket服务 + HTTP静态页面服务
