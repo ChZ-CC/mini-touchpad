@@ -1,154 +1,149 @@
-# TouchPad - 手机触控板Web版
+# Touchpad - 手机触控板
 
-## 项目介绍
+一个基于WebSocket的手机触控板应用，允许用户通过手机浏览器控制电脑鼠标。
 
-TouchPad是一个使用Web技术实现的手机触控板工具，允许你通过手机浏览器控制电脑鼠标。
+## 功能特性
 
-### 主要功能
+- 📱 手机浏览器作为触控板
+- 🖱️ 完整的鼠标控制（移动、点击、拖拽）
+- ⚡ 低延迟响应（~100ms）
+- 🔒 心跳保活机制
+- 🎯 消息队列优化，防止积压
+- 🔧 可配置的参数
+- 📊 可选的调试模式
 
-- 手机触摸屏幕控制电脑鼠标移动
-- 点击屏幕模拟鼠标左键点击
-- 底部控制按钮：左键、右键、长按功能
-- 跨平台支持（Windows、Mac、Linux）
-- 无需安装APP，仅需浏览器访问
+## 项目结构
 
-## 技术栈
-
-- **后端**：Python 3.12+，使用websockets和pyautogui库
-- **前端**：HTML5 + JavaScript
-- **通信**：WebSocket实时通信
-
-## 安装依赖
-
-### 1. 克隆项目（如果没有）
-
-```bash
-git clone <项目地址>
-cd touch-pad
+```
+touch-pad/
+├── touchpad/              # 主包
+│   ├── __init__.py        # 包初始化
+│   ├── app.py             # 应用主类
+│   ├── config.py          # 配置管理
+│   ├── log.py             # 日志系统
+│   ├── utils.py           # 工具函数
+│   ├── handlers/          # 命令处理器
+│   │   ├── __init__.py
+│   │   ├── base.py        # 基类
+│   │   ├── mouse.py       # 鼠标命令
+│   │   └── dispatcher.py  # 命令分发
+│   └── network/           # 网络模块
+│       ├── __init__.py
+│       ├── http.py        # HTTP服务器
+│       └── websocket.py   # WebSocket服务器
+├── static/                # 静态文件
+│   └── touchpad.html     # 前端页面
+├── logs/                  # 日志目录
+├── docs/                  # 文档目录
+├── main.py               # 程序入口
+├── requirements.txt       # 依赖列表
+├── .env                  # 环境变量
+├── .env.example          # 环境变量示例
+└── README.md            # 本文件
 ```
 
-### 2. 激活虚拟环境
+## 快速开始
+
+### 安装依赖
 
 ```bash
-# Windows
-.venv\Scripts\activate
-
-# macOS/Linux
-. .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### 3. 安装依赖库
+或使用 uv:
 
 ```bash
-# 使用uv安装依赖
-uv add websockets pyautogui
-
-# 或使用pip
-pip install websockets pyautogui
+uv sync
 ```
 
-## 运行代码
+### 配置环境变量
 
-### 1. 配置参数
-
-项目使用 `.env` 文件进行配置，你可以根据需要调整以下参数：
+创建 `.env` 文件：
 
 ```bash
-# 鼠标移动速度系数（数值越大，鼠标移动越快）
-MOUSE_SPEED=3.0
-
-# 消息合并时间间隔（毫秒，影响刷新频率，16ms约60fps）
-MESSAGE_INTERVAL=16
-
-# 点击阈值（像素，区分点击和滑动）
-CLICK_THRESHOLD=1
-
-# 服务端口配置
-HTTP_PORT=9876
-WEBSOCKET_PORT=9877
+cp .env.example .env
 ```
 
-### 2. 启动服务
+### 运行程序
 
 ```bash
 python main.py
 ```
 
-### 3. 查看服务信息
+### 使用方法
 
-服务启动后会显示如下信息：
+1. 确保手机和电脑连接同一WiFi
+2. 查看控制台输出的IP地址
+3. 在手机浏览器访问显示的URL
+4. 开始使用触控板
 
-```plaintext
-=== 手机触控板服务已启动 ===
-1. 电脑IP地址：192.168.10.240
-2. 手机浏览器访问：http://你的电脑IP:9876
-3. 确保手机和电脑连接同一WiFi
+## 配置说明
+
+| 参数             | 说明             | 默认值 |
+| ---------------- | ---------------- | ------ |
+| MOUSE_SPEED      | 鼠标移动速度     | 3.0    |
+| MESSAGE_INTERVAL | 消息发送间隔(ms) | 16     |
+| CLICK_THRESHOLD  | 点击阈值(像素)   | 1      |
+| HTTP_PORT        | HTTP服务端口     | 9876   |
+| WEBSOCKET_PORT   | WebSocket端口    | 9877   |
+| DEBUG_MODE       | 调试模式         | false  |
+
+## 开发指南
+
+### 添加新命令
+
+1. 在 `touchpad/handlers/` 创建新的处理器类
+2. 继承 `CommandHandler` 基类
+3. 实现 `execute` 方法
+4. 在 `CommandDispatcher` 中注册
+
+示例：
+
+```python
+from touchpad.handlers.base import CommandHandler
+from typing import List
+
+class ScrollCommandHandler(CommandHandler):
+    def execute(self, args: List[str]) -> None:
+        if len(args) == 1:
+            clicks = int(args[0])
+            pyautogui.scroll(clicks)
 ```
 
-## 使用说明
+## 技术栈
 
-### 1. 连接准备
+- Python 3.7+
+- asyncio - 异步编程
+- websockets - WebSocket 通信
+- pyautogui - 鼠标控制
+- python-dotenv - 环境变量管理
 
-- 确保手机和电脑连接在同一个WiFi网络下
-- 手机浏览器访问服务显示的IP地址，例如：`http://192.168.10.240:9876`
+## 性能优化
 
-### 2. 控制方式
+- 使用单元素消息队列防止积压
+- 只处理最新消息，丢弃积压消息
+- 异步处理提高并发
+- 心跳机制保证连接稳定
 
-- **移动鼠标**：在手机屏幕上滑动手指
-- **点击**：在手机屏幕上轻点（相当于鼠标左键点击）
-- **底部控制按钮**：
-  - **左键**：执行鼠标左键点击
-  - **右键**：执行鼠标右键点击
-  - **长按**：执行鼠标左键长按操作
+## 贡献指南
 
-### 3. 常见问题
-
-- **连接失败**：检查电脑和手机是否在同一WiFi网络，IP地址是否正确
-- **鼠标移动不流畅**：调整代码中的`MOUSE_SPEED`参数（数值越小越灵敏）
-- **点击无反应**：确保触摸事件被正确捕获，检查浏览器兼容性
-
-## 技术实现
-
-### 服务端
-
-- **HTTP服务**：提供手机端Web页面（端口9876）
-- **WebSocket服务**：接收手机触摸指令并控制鼠标（端口9877）
-- **鼠标控制**：使用pyautogui库模拟鼠标移动和点击
-
-### 客户端
-
-- **触摸事件**：监听touchstart、touchmove、touchend事件
-- **WebSocket连接**：实时发送触摸数据到服务端
-- **消息合并**：累积触摸移动量，减少网络传输
-- **数据格式优化**：使用字符串拼接格式，减少序列化开销
-- **响应式设计**：适配不同手机屏幕尺寸
-
-## 项目结构
-
-```plaintext
-touch-pad/
-├── main.py          # 主程序文件
-├── touchpad.html    # 前端HTML文件
-├── .env             # 环境变量配置文件
-├── README.md        # 项目文档
-├── pyproject.toml   # 项目配置
-└── .venv/           # 虚拟环境
-```
-
-## 注意事项
-
-- 本工具仅在局域网内使用，不支持公网访问
-- 确保电脑和手机网络连接稳定
-- 部分浏览器可能对触摸事件处理有所不同
-- 长时间使用可能会有电池消耗，建议在需要时使用
-
-## 扩展功能（未来计划）
-
-- 支持鼠标右键点击
-- 支持滚轮操作
-- 添加键盘输入功能
-- 优化响应速度和稳定性
+欢迎提交 Issue 和 Pull Request！
 
 ## 许可证
 
 MIT License
+
+## 更新日志
+
+### v1.1.0 (2026-03-25)
+
+- 重构项目结构
+- 添加日志系统
+- 优化消息处理
+- 改进代码质量
+- 完善文档
+
+### v1.0.0
+
+- 初始版本
+- 基本触控板功能
