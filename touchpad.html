@@ -17,6 +17,8 @@
         #touch-area {
             flex: 1;
             width: 100%;
+            background: #ffffff00;
+            z-index: 1000;
         }
 
         #control-buttons {
@@ -52,35 +54,37 @@
 </head>
 
 <body>
-    <div id="touch-area"></div>
-
     <div id="control-buttons">
         <button class="control-btn" id="left-click">左键</button>
         <button class="control-btn" id="right-click">右键</button>
-        <button class="control-btn" id="long-press">长按</button>
     </div>
+    <div id="touch-area"></div>
 
     <script>
         // 指令常量
         const CMD = {
-            MOVE: 'move:',
-            LEFT_DOWN: 'left_down:',
-            LEFT_UP: 'left_up:',
-            RIGHT_DOWN: 'right_down:',
-            RIGHT_UP: 'right_up:'
+            MOVE: 'move|',
+            LEFT_DOWN: 'left_down|',
+            LEFT_UP: 'left_up|',
+            RIGHT_DOWN: 'right_down|',
+            RIGHT_UP: 'right_up|'
         };
 
+        // 设置鼠标移动速度（数值越小越灵敏）
+        const MOUSE_SPEED = 3.0;
+        // 点击阈值（像素）
+        const CLICK_THRESHOLD = 10;
+        const MESSAGE_INTERVAL = 16;
+        const WEBSOCKET_PORT = 9877;
+        const DEBUG_MODE = false;
+
         // 连接电脑的WebSocket服务（使用当前页面的IP地址）
-        const ws = new WebSocket('ws://' + window.location.hostname + ':9877');
+        const ws = new WebSocket('ws://' + window.location.hostname + ':' + WEBSOCKET_PORT);
 
         let lastX = 0, lastY = 0;
         let startX = 0, startY = 0;
         let isDragging = false;
         const touchArea = document.getElementById('touch-area');
-        // 设置鼠标移动速度（数值越小越灵敏）
-        const MOUSE_SPEED = 3.0;
-        // 点击阈值（像素）
-        const CLICK_THRESHOLD = 1;
 
         // WebSocket连接状态
         ws.onopen = () => {
@@ -91,6 +95,24 @@
         ws.onclose = () => {
             console.log('WebSocket连接关闭');
         };
+
+        // 发送指令
+        function sendCommand(command) {
+            let formatedCommand = command;
+            if (DEBUG_MODE) {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                const seconds = String(now.getSeconds()).padStart(2, '0');
+                const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+                const timeStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
+                formatedCommand = command + "|" + timeStr;
+            }
+            ws.send(formatedCommand);
+        }
 
         // 监听触摸开始事件
         touchArea.addEventListener('touchstart', (e) => {
@@ -108,6 +130,7 @@
         let moveTimer = null;
         let accumulatedDx = 0;
         let accumulatedDy = 0;
+        let moveFrame = null; // 替代 moveTimer
 
         // 监听触摸滑动事件
         touchArea.addEventListener('touchmove', (e) => {
@@ -126,6 +149,10 @@
 
             if (distance > CLICK_THRESHOLD) {
                 isDragging = true;
+            } else {
+                lastX = touch.clientX;
+                lastY = touch.clientY;
+                return;
             }
 
             // 累积移动量
@@ -143,7 +170,7 @@
                     // 发送合并后的鼠标移动指令
                     const moveCommand = CMD.MOVE + `${accumulatedDx},${accumulatedDy}`;
                     // 发送数据
-                    ws.send(moveCommand);
+                    sendCommand(moveCommand);
                     // 重置累积量
                     accumulatedDx = 0;
                     accumulatedDy = 0;
@@ -170,10 +197,10 @@
                 // 是点击操作
                 console.log('执行点击操作');
                 // 模拟点击：按下后立即抬起
-                ws.send(CMD.LEFT_DOWN);
+                sendCommand(CMD.LEFT_DOWN);
                 // 短暂延迟后发送抬起指令
                 setTimeout(() => {
-                    ws.send(CMD.LEFT_UP);
+                    sendCommand(CMD.LEFT_UP);
                 }, 50);
             }
         });
@@ -187,50 +214,18 @@
         // 控制按钮事件处理
         document.getElementById('left-click').addEventListener('click', () => {
             console.log('执行左键点击');
-            ws.send(CMD.LEFT_DOWN);
+            sendCommand(CMD.LEFT_DOWN);
             setTimeout(() => {
-                ws.send(CMD.LEFT_UP);
+                sendCommand(CMD.LEFT_UP);
             }, 50);
         });
 
         document.getElementById('right-click').addEventListener('click', () => {
             console.log('执行右键点击');
-            ws.send(CMD.RIGHT_DOWN);
+            sendCommand(CMD.RIGHT_DOWN);
             setTimeout(() => {
-                ws.send(CMD.RIGHT_UP);
+                sendCommand(CMD.RIGHT_UP);
             }, 50);
-        });
-
-        // 长按功能
-        let longPressTimer = null;
-        const longPressButton = document.getElementById('long-press');
-
-        longPressButton.addEventListener('mousedown', () => {
-            console.log('开始长按');
-            ws.send(CMD.LEFT_DOWN);
-
-            // 清除之前的定时器
-            if (longPressTimer) {
-                clearTimeout(longPressTimer);
-            }
-        });
-
-        longPressButton.addEventListener('mouseup', () => {
-            console.log('结束长按');
-            ws.send(CMD.LEFT_UP);
-        });
-
-        // 触摸事件支持
-        longPressButton.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            console.log('开始长按（触摸）');
-            ws.send(CMD.LEFT_DOWN);
-        });
-
-        longPressButton.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            console.log('结束长按（触摸）');
-            ws.send(CMD.LEFT_UP);
         });
     </script>
 </body>

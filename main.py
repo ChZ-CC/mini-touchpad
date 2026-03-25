@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 import websockets
 import pyautogui
 import os
@@ -15,26 +16,34 @@ CMD_RIGHT_UP = "right_up"
 pyautogui.FAILSAFE = False
 
 # 读取配置参数（从环境变量或使用默认值）
+dotenv.load_dotenv()
 MOUSE_SPEED = float(os.getenv("MOUSE_SPEED", "3.0"))
 MESSAGE_INTERVAL = int(os.getenv("MESSAGE_INTERVAL", "16"))
 CLICK_THRESHOLD = int(os.getenv("CLICK_THRESHOLD", "1"))
 HTTP_PORT = int(os.getenv("HTTP_PORT", "9876"))
 WEBSOCKET_PORT = int(os.getenv("WEBSOCKET_PORT", "9877"))
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false") in ["True", "true", "1", "t"]
 
 # 读取前端HTML文件
 with open("touchpad.html", "r", encoding="utf-8") as f:
     HTML_PAGE = f.read()
 
 # 替换前端HTML中的配置参数
-HTML_PAGE = HTML_PAGE.replace('"mouse_speed": 3.0', f'"mouse_speed": {MOUSE_SPEED}')
 HTML_PAGE = HTML_PAGE.replace(
-    '"click_threshold": 1', f'"click_threshold": {CLICK_THRESHOLD}'
+    "const MOUSE_SPEED = 3.0;", f"const MOUSE_SPEED = {MOUSE_SPEED};"
 )
 HTML_PAGE = HTML_PAGE.replace(
-    '"message_interval": 16', f'"message_interval": {MESSAGE_INTERVAL}'
+    "const CLICK_THRESHOLD = 10;", f"const CLICK_THRESHOLD = {CLICK_THRESHOLD};"
 )
 HTML_PAGE = HTML_PAGE.replace(
-    '"websocket_port": 9877', f'"websocket_port": {WEBSOCKET_PORT}'
+    "const MESSAGE_INTERVAL = 16;", f"const MESSAGE_INTERVAL = {MESSAGE_INTERVAL};"
+)
+HTML_PAGE = HTML_PAGE.replace(
+    "const WEBSOCKET_PORT = 9877;", f"const WEBSOCKET_PORT = {WEBSOCKET_PORT};"
+)
+HTML_PAGE = HTML_PAGE.replace(
+    "const DEBUG_MODE = false;",
+    f"const DEBUG_MODE = {'true' if DEBUG_MODE else 'false'}",
 )
 
 # 心跳超时时间（如 30 秒）
@@ -61,38 +70,56 @@ async def handle_message(websocket):
     # 启动心跳任务
     ping_task = asyncio.create_task(ping_keep_alive(websocket))
     try:
-        async for message in websocket:
-            # 解析手机发来的字符串指令
-            try:
-                if message == "ping":
-                    # 处理心跳消息
-                    await websocket.send("pong")
-                    return
+        # 使用队列来缓冲消息，避免阻塞接收
+        message_queue = asyncio.Queue(maxsize=1)
 
-                # 解析指令格式：cmd:arg1,arg2
-                parts = message.split(":")
-                cmd = parts[0]
-                args = parts[1].split(",") if len(parts) > 1 else []
+        async def message_receiver():
+            async for message in websocket:
+                try:
+                    # 非阻塞方式放入队列，如果队列满则丢弃旧消息
+                    message_queue.put_nowait(message)
+                except asyncio.QueueFull:
+                    # 队列已满，取出旧消息放入新消息
+                    try:
+                        message_queue.get_nowait()
+                        message_queue.put_nowait(message)
+                    except:
+                        pass
 
-                if cmd == CMD_MOVE and len(args) == 2:
-                    # 移动鼠标（相对当前位置）
-                    dx = float(args[0])
-                    dy = float(args[1])
-                    pyautogui.moveRel(dx, dy, duration=0)
-                elif cmd == CMD_LEFT_DOWN:
-                    # 鼠标左键按下
-                    pyautogui.mouseDown(button="left")
-                elif cmd == CMD_LEFT_UP:
-                    # 鼠标左键抬起
-                    pyautogui.mouseUp(button="left")
-                elif cmd == CMD_RIGHT_DOWN:
-                    # 鼠标右键按下
-                    pyautogui.mouseDown(button="right")
-                elif cmd == CMD_RIGHT_UP:
-                    # 鼠标右键抬起
-                    pyautogui.mouseUp(button="right")
-            except Exception as e:
-                print(f"解析指令出错：{e}")
+        # 启动消息接收协程
+        asyncio.create_task(message_receiver())
+
+        # 处理消息
+        while True:
+            message = await message_queue.get()
+            now = datetime.now()
+            if DEBUG_MODE:
+                print(f"收到消息[{now}]: {message}")
+            parts = message.split("|")
+            cmd = parts[0]
+            args = parts[1].split(",") if len(parts) > 1 else []
+
+            if cmd == CMD_MOVE and len(args) == 2:
+                # 移动鼠标（相对当前位置）
+                dx = float(args[0])
+                dy = float(args[1])
+                pyautogui.moveRel(dx, dy, duration=0)
+            elif cmd == CMD_LEFT_DOWN:
+                # 鼠标左键按下
+                pyautogui.mouseDown(button="left")
+            elif cmd == CMD_LEFT_UP:
+                # 鼠标左键抬起
+                pyautogui.mouseUp(button="left")
+            elif cmd == CMD_RIGHT_DOWN:
+                # 鼠标右键按下
+                pyautogui.mouseDown(button="right")
+            elif cmd == CMD_RIGHT_UP:
+                # 鼠标右键抬起
+                pyautogui.mouseUp(button="right")
+            else:
+                print(f"未知指令：{message}")
+            if DEBUG_MODE:
+                print(f"耗时：{datetime.now() - now}")
     except websockets.exceptions.ConnectionClosedError:
         print("连接异常关闭")
     finally:
@@ -107,17 +134,20 @@ async def handle_message(websocket):
 # 启动WebSocket服务 + HTTP静态页面服务
 async def main():
     # 启动WebSocket服务（监听所有网卡）
-    print(
-        f"当前配置：\n\tMOUSE_SPEED={MOUSE_SPEED}"
-        f"\n\tMESSAGE_INTERVAL={MESSAGE_INTERVAL}"
-        f"\n\tCLICK_THRESHOLD={CLICK_THRESHOLD}"
-        f"\n\tHTTP_PORT={HTTP_PORT}"
-        f"\n\tWEBSOCKET_PORT={WEBSOCKET_PORT}"
-    )
+    if DEBUG_MODE:
+        print(
+            f"当前配置：\n\tMOUSE_SPEED={MOUSE_SPEED}"
+            f"\n\tMESSAGE_INTERVAL={MESSAGE_INTERVAL}"
+            f"\n\tCLICK_THRESHOLD={CLICK_THRESHOLD}"
+            f"\n\tHTTP_PORT={HTTP_PORT}"
+            f"\n\tWEBSOCKET_PORT={WEBSOCKET_PORT}"
+            f"\n\tDEBUG_MODE={DEBUG_MODE}"
+        )
     async with websockets.serve(handle_message, "0.0.0.0", WEBSOCKET_PORT):
+        ip = get_local_ip()
         print("=== 手机触控板服务已启动 ===")
-        print(f"1. 电脑IP地址：{get_local_ip()}")
-        print(f"2. 手机浏览器访问：http://你的电脑IP:{HTTP_PORT}")
+        print(f"1. 电脑IP地址：{ip}")
+        print(f"2. 手机浏览器访问：http://{ip}:{HTTP_PORT}")
         print("3. 确保手机和电脑连接同一WiFi")
         await asyncio.Future()  # 保持服务运行
 
