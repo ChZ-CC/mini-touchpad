@@ -36,3 +36,12 @@ class MouseUpCommandHandler(CommandHandler):
 
     def execute(self, args: List[str]) -> None:
         pyautogui.mouseUp(button=self.button)
+
+
+class ScrollCommandHandler(CommandHandler):
+    """滚动命令处理器"""
+
+    def execute(self, args: List[str]) -> None:
+        if len(args) == 1:
+            amount = int(args[0])
+            pyautogui.scroll(amount)

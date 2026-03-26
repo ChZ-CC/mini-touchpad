@@ -5,7 +5,12 @@
 
 from typing import Dict, List
 from .base import CommandHandler
-from .mouse import MoveCommandHandler, MouseDownCommandHandler, MouseUpCommandHandler
+from .mouse import (
+    MoveCommandHandler,
+    MouseDownCommandHandler,
+    MouseUpCommandHandler,
+    ScrollCommandHandler,
+)
 from touchpad.config import CommandConstants
 from touchpad.log import get_logger
 
@@ -29,6 +34,7 @@ class CommandDispatcher:
         self._handlers[CommandConstants.LEFT_UP] = MouseUpCommandHandler("left")
         self._handlers[CommandConstants.RIGHT_DOWN] = MouseDownCommandHandler("right")
         self._handlers[CommandConstants.RIGHT_UP] = MouseUpCommandHandler("right")
+        self._handlers[CommandConstants.SCROLL] = ScrollCommandHandler()
 
     def dispatch(self, command: str, args: List[str]) -> None:
         """分发命令到对应的处理器

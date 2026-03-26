@@ -67,7 +67,8 @@
             LEFT_DOWN: 'left_down|',
             LEFT_UP: 'left_up|',
             RIGHT_DOWN: 'right_down|',
-            RIGHT_UP: 'right_up|'
+            RIGHT_UP: 'right_up|',
+            SCROLL: 'scroll|'
         };
 
         // 设置鼠标移动速度（数值越小越灵敏）
@@ -84,6 +85,8 @@
         let lastX = 0, lastY = 0;
         let startX = 0, startY = 0;
         let isDragging = false;
+        let lastTwoFingerY = 0; // 双指滑动的初始Y坐标
+        let currentTouchCount = 0; // 当前触摸手指数量
         const touchArea = document.getElementById('touch-area');
 
         // WebSocket连接状态
@@ -116,14 +119,29 @@
 
         // 监听触摸开始事件
         touchArea.addEventListener('touchstart', (e) => {
-            console.log('触摸开始', e.touches[0]);
+            console.log('触摸开始，触点数:', e.touches.length);
             e.preventDefault(); // 阻止默认滑动（如页面缩放）
-            const touch = e.touches[0];
-            startX = touch.clientX;
-            startY = touch.clientY;
-            lastX = touch.clientX;
-            lastY = touch.clientY;
-            isDragging = false;
+
+            currentTouchCount = e.touches.length;
+
+            if (e.touches.length === 1) {
+                // 单指触摸
+                const touch = e.touches[0];
+                startX = touch.clientX;
+                startY = touch.clientY;
+                lastX = touch.clientX;
+                lastY = touch.clientY;
+                isDragging = false;
+            } else if (e.touches.length === 2) {
+                // 双指触摸
+                console.log('双指触摸开始');
+                // 计算双指初始距离
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
+                // 记录双指初始Y坐标（用于滚轮）
+                const avgY = (touch1.clientY + touch2.clientY) / 2;
+                lastTwoFingerY = avgY;
+            }
         });
 
         // 消息合并和节流
@@ -134,74 +152,112 @@
 
         // 监听触摸滑动事件
         touchArea.addEventListener('touchmove', (e) => {
-            // console.log('触摸滑动', e.touches[0]);
             e.preventDefault();
-            const touch = e.touches[0];
-            // 计算偏移量（乘以系数调整灵敏度）
-            const dx = (touch.clientX - lastX) * MOUSE_SPEED;
-            const dy = (touch.clientY - lastY) * MOUSE_SPEED;
+            const isScroll = currentTouchCount === 2 || e.touches.length === 2;
+            if (isScroll) {
+                currentTouchCount = 2;
+            }
 
-            // 检查是否超过点击阈值
-            const distance = Math.sqrt(
-                Math.pow(touch.clientX - startX, 2) +
-                Math.pow(touch.clientY - startY, 2)
-            );
+            if (!isScroll) {
+                // 单指触摸 - 鼠标移动
+                const touch = e.touches[0];
+                // 计算偏移量（乘以系数调整灵敏度）
+                const dx = (touch.clientX - lastX) * MOUSE_SPEED;
+                const dy = (touch.clientY - lastY) * MOUSE_SPEED;
 
-            if (distance > CLICK_THRESHOLD) {
-                isDragging = true;
-            } else {
+                // 检查是否超过点击阈值
+                const distance = Math.sqrt(
+                    Math.pow(touch.clientX - startX, 2) +
+                    Math.pow(touch.clientY - startY, 2)
+                );
+
+                if (distance > CLICK_THRESHOLD) {
+                    isDragging = true;
+                } else {
+                    lastX = touch.clientX;
+                    lastY = touch.clientY;
+                    return;
+                }
+
+                // 累积移动量
+                accumulatedDx += dx;
+                accumulatedDy += dy;
+
+                // 清除之前的定时器
+                if (moveTimer) {
+                    clearTimeout(moveTimer);
+                }
+
+                // 设置新的定时器，16ms发送一次合并后的消息（约60fps）
+                moveTimer = setTimeout(() => {
+                    if (Math.abs(accumulatedDx) > 0 || Math.abs(accumulatedDy) > 0) {
+                        // 发送合并后的鼠标移动指令
+                        const moveCommand = CMD.MOVE + `${accumulatedDx},${accumulatedDy}`;
+                        // 发送数据
+                        sendCommand(moveCommand);
+                        // 重置累积量
+                        accumulatedDx = 0;
+                        accumulatedDy = 0;
+                    }
+                }, 16);
+
+                // 更新上次坐标
                 lastX = touch.clientX;
                 lastY = touch.clientY;
-                return;
-            }
+            } else if (isScroll) {
+                // 双指触摸 - 鼠标滚轮
+                console.log('双指滑动');
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
 
-            // 累积移动量
-            accumulatedDx += dx;
-            accumulatedDy += dy;
+                // 计算双指当前Y坐标的平均值
+                const currentAvgY = (touch1.clientY + touch2.clientY) / 2;
 
-            // 清除之前的定时器
-            if (moveTimer) {
-                clearTimeout(moveTimer);
-            }
+                // 计算Y方向的偏移量
+                const deltaY = currentAvgY - lastTwoFingerY;
 
-            // 设置新的定时器，16ms发送一次合并后的消息（约60fps）
-            moveTimer = setTimeout(() => {
-                if (Math.abs(accumulatedDx) > 0 || Math.abs(accumulatedDy) > 0) {
-                    // 发送合并后的鼠标移动指令
-                    const moveCommand = CMD.MOVE + `${accumulatedDx},${accumulatedDy}`;
-                    // 发送数据
-                    sendCommand(moveCommand);
-                    // 重置累积量
-                    accumulatedDx = 0;
-                    accumulatedDy = 0;
+                // 如果偏移量足够大，发送滚轮指令
+                if (Math.abs(deltaY) > 5) {
+                    // 计算滚动量（负值为向上滚动，正值为向下滚动）
+                    const scrollAmount = Math.round(deltaY) * MOUSE_SPEED * 2;
+                    console.log('发送滚轮指令:', scrollAmount);
+                    sendCommand(CMD.SCROLL + scrollAmount);
+                    // 更新上次双指Y坐标
+                    lastTwoFingerY = currentAvgY;
+                    lastX = (touch1.clientX + touch2.clientX) / 2;
+                    lastY = (touch1.clientY + touch2.clientY) / 2;
                 }
-            }, 16);
-
-            // 更新上次坐标
-            lastX = touch.clientX;
-            lastY = touch.clientY;
+            }
         });
 
         // 监听触摸结束事件
         touchArea.addEventListener('touchend', (e) => {
-            console.log('触摸结束');
+            console.log('触摸结束，触点数:', e.touches.length);
             e.preventDefault();
 
-            // 检查是否是点击（移动距离小于阈值）
-            const distance = Math.sqrt(
-                Math.pow(lastX - startX, 2) +
-                Math.pow(lastY - startY, 2)
-            );
+            if (e.touches.length === 0) {
+                // 所有手指都离开屏幕
+                console.log('当前触摸数量:', currentTouchCount);
 
-            if (!isDragging && distance <= CLICK_THRESHOLD) {
-                // 是点击操作
-                console.log('执行点击操作');
-                // 模拟点击：按下后立即抬起
-                sendCommand(CMD.LEFT_DOWN);
-                // 短暂延迟后发送抬起指令
-                setTimeout(() => {
-                    sendCommand(CMD.LEFT_UP);
-                }, 50);
+                if (currentTouchCount === 1) {
+                    // 单指离开屏幕 - 检查是否是单指点击
+                    const distance = Math.sqrt(
+                        Math.pow(lastX - startX, 2) +
+                        Math.pow(lastY - startY, 2)
+                    );
+
+                    if (!isDragging && distance <= CLICK_THRESHOLD) {
+                        // 是单指点击操作
+                        console.log('执行单指点击（左键）');
+                        // 模拟点击：按下后立即抬起
+                        sendCommand(CMD.LEFT_DOWN);
+                        // 短暂延迟后发送抬起指令
+                        setTimeout(() => {
+                            sendCommand(CMD.LEFT_UP);
+                        }, 50);
+                    }
+                }
+                currentTouchCount = 0;
             }
         });
 

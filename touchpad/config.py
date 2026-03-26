@@ -58,6 +58,7 @@ class CommandConstants:
     LEFT_UP: Final[str] = "left_up"
     RIGHT_DOWN: Final[str] = "right_down"
     RIGHT_UP: Final[str] = "right_up"
+    SCROLL: Final[str] = "scroll"
 
 
 config = Config()
