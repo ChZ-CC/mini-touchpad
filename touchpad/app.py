@@ -13,7 +13,6 @@ from .network import HTTPServer
 from .utils import get_local_ip
 
 logger = get_logger(__name__)
-print(logger)
 
 
 class TouchpadApplication:

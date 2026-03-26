@@ -4,6 +4,8 @@
 """
 
 import asyncio
+import http
+import signal
 import websockets
 from typing import Callable, Awaitable
 from touchpad.config import Config
@@ -51,14 +53,90 @@ class WebSocketConnection:
         try:
             await self._message_processor()
         except websockets.exceptions.ConnectionClosedError:
-            logger.warning("连接异常关闭")
+            logger.warning("[message_receiver]连接异常关闭")
         finally:
-            logger.info(f"连接关闭: {websocket.remote_address}")
+            logger.debug(
+                f"[message_receiver] cancelling [message_receiver]: {websocket.remote_address}"
+            )
             receiver_task.cancel()
+            logger.debug(
+                f"[message_receiver] status: cancelled={receiver_task.cancelled()} done={receiver_task.done()}"
+            )
             try:
+                logger.debug(f"[message_receiver] waitting")
                 await receiver_task
             except asyncio.CancelledError:
+                logger.debug(f"[message_receiver] cancelled!")
                 pass
+
+
+class WebSocketServer:
+    """WebSocket服务器
+
+    管理多个WebSocket连接的生命周期。
+    """
+
+    def __init__(
+        self,
+        config: Config,
+        message_handler: Callable[[str], Awaitable[None]],
+    ):
+        self._config = config
+        self._message_handler = message_handler
+        self._server = None
+        self._serve_task = None
+
+    async def start(self) -> None:
+        """启动WebSocket服务器"""
+        logger.info(f"启动WebSocket服务器: 0.0.0.0:{self._config.websocket_port}")
+        connection = WebSocketConnection(self._message_handler, self._config)
+        self._server = await websockets.serve(
+            connection.handle,
+            "0.0.0.0",
+            self._config.websocket_port,
+            ping_interval=self._config.ping_interval,
+            ping_timeout=self._config.ping_timeout,
+        )
+        self._serve_task = asyncio.create_task(self._server.serve_forever())
+        stop = asyncio.get_running_loop().create_future()
+        try:
+            await stop
+        except asyncio.CancelledError:
+            logger.debug("[server] WebSocket服务器已关闭")
+        finally:
+            logger.debug("start cleanup...")
+            await self.cleanup()
+
+    async def cleanup(self) -> None:
+        """关闭WebSocket服务器"""
+        if self._serve_task:
+            logger.debug(f"[cleanup] cancelling server_task...")
+            self._serve_task.cancel()
+            try:
+                logger.debug(f"[cleanup] waitting server_task")
+                await asyncio.wait_for(self._serve_task, timeout=2)
+            except asyncio.CancelledError:
+                logger.info("[cleanup] server_task cancelled")
+            except asyncio.TimeoutError:
+                logger.info(
+                    f"[cleanup] server_task timeout. cancelled={self._serve_task.cancelled()}"
+                )
+
+        if self._server:
+            logger.debug("[cleanup] closing server")
+            self._server.close()
+            try:
+                await asyncio.wait_for(self._server.wait_closed(), timeout=2)
+            except asyncio.TimeoutError:
+                logger.info("[cleanup] server close timeout")
+                pass
+            self._server = None
+            self._serve_task = None
+
+
+def health_check(connection, request):
+    if request.path == "/healthz":
+        return connection.respond(http.HTTPStatus.OK, "OK\n")
 
 
 async def start_websocket_server(
@@ -71,7 +149,8 @@ async def start_websocket_server(
         connection.handle,
         "0.0.0.0",
         config.websocket_port,
+        process_request=health_check,
         ping_interval=config.ping_interval,
         ping_timeout=config.ping_timeout,
-    ):
-        await asyncio.Future()
+    ) as server:
+        await server.serve_forever()

@@ -23,7 +23,7 @@ class Logger:
         logger.setLevel(config.log_level)
 
         # 阻止日志传播到父 logger，避免重复记录
-        logger.propagate = False
+        # logger.propagate = False
 
         # 避免重复添加处理器
         if logger.handlers:
