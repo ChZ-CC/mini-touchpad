@@ -8,8 +8,8 @@ from datetime import datetime
 from .config import config
 from .handlers import CommandDispatcher
 from .log import get_logger
-from .network import start_websocket_server
-from .network import start_http_server
+from .network import WebSocketServer
+from .network import HTTPServer
 from .utils import get_local_ip
 
 logger = get_logger(__name__)
@@ -24,6 +24,8 @@ class TouchpadApplication:
 
     def __init__(self):
         self._command_dispatcher = CommandDispatcher()
+        self.http_server = HTTPServer(host="0.0.0.0", port=config.http_port)
+        self.websocket_server = WebSocketServer(config, self._handle_message)
 
     async def _handle_message(self, message: str) -> None:
         """处理接收到的消息
@@ -63,19 +65,20 @@ class TouchpadApplication:
         print(f"1. 电脑IP地址：{ip}")
         print(f"2. 手机浏览器访问：http://{ip}:{config.http_port}")
         print("3. 确保手机和电脑连接同一WiFi")
+        print("==========================")
 
     async def run(self) -> None:
         """运行应用"""
         self._print_startup_info()
-        start_http_server(host="0.0.0.0", port=config.http_port)
-        await start_websocket_server(self._handle_message, config)
+        self.http_server.start()
+        try:
+            await self.websocket_server.start()
+        finally:
+            await self.close()
+
+    async def close(self) -> None:
+        # 关闭HTTP服务器
+        self.http_server.stop()
 
 
-async def main():
-    """主函数"""
-    logger.info("启动触控板应用")
-    app = TouchpadApplication()
-    await app.run()
-
-
-__all__ = ["TouchpadApplication", "main"]
+app = TouchpadApplication()

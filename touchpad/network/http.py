@@ -47,7 +47,7 @@ class HTTPServer:
 
     def start(self) -> None:
         """启动HTTP服务器"""
-        logger.info(f"启动HTTP服务器: {self._host}:{self._port}")
+        logger.info(f"[http_server] 启动HTTP服务器: {self._host}:{self._port}")
         self._server = StdlibHTTPServer((self._host, self._port), HTTPRequestHandler)
         self._thread = Thread(target=self._server.serve_forever)
         self._thread.daemon = True
@@ -55,7 +55,7 @@ class HTTPServer:
 
     def stop(self) -> None:
         """停止HTTP服务器"""
-        logger.info("停止HTTP服务器")
+        logger.info("[http_server] 停止HTTP服务器")
         if self._server:
             self._server.shutdown()
             if self._thread:

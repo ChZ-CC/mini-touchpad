@@ -124,7 +124,7 @@
 
             currentTouchCount = e.touches.length;
 
-            if (e.touches.length === 1) {
+            if (e.touches.length >= 1) {
                 // 单指触摸
                 const touch = e.touches[0];
                 startX = touch.clientX;
@@ -132,7 +132,8 @@
                 lastX = touch.clientX;
                 lastY = touch.clientY;
                 isDragging = false;
-            } else if (e.touches.length === 2) {
+            }
+            if (e.touches.length === 2) {
                 // 双指触摸
                 console.log('双指触摸开始');
                 // 计算双指初始距离
@@ -254,6 +255,23 @@
                         // 短暂延迟后发送抬起指令
                         setTimeout(() => {
                             sendCommand(CMD.LEFT_UP);
+                        }, 50);
+                    }
+                } else if (currentTouchCount === 2) {
+                    // 双指离开屏幕 - 检查是否是双指点击
+                    const distance = Math.sqrt(
+                        Math.pow(lastX - startX, 2) +
+                        Math.pow(lastY - startY, 2)
+                    );
+
+                    if (!isDragging && distance <= CLICK_THRESHOLD) {
+                        // 是双指点击操作
+                        console.log('执行双指点击（右键）');
+                        // 模拟点击：按下后立即抬起
+                        sendCommand(CMD.RIGHT_DOWN);
+                        // 短暂延迟后发送抬起指令
+                        setTimeout(() => {
+                            sendCommand(CMD.RIGHT_UP);
                         }, 50);
                     }
                 }
