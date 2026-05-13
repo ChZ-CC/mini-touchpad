@@ -4,6 +4,8 @@
 """
 
 from typing import Dict, List
+from pynput.mouse import Button
+
 from .base import CommandHandler
 from .mouse import (
     MoveCommandHandler,
@@ -30,10 +32,14 @@ class CommandDispatcher:
     def _register_handlers(self) -> None:
         """注册所有命令处理器"""
         self._handlers[CommandConstants.MOVE] = MoveCommandHandler()
-        self._handlers[CommandConstants.LEFT_DOWN] = MouseDownCommandHandler("left")
-        self._handlers[CommandConstants.LEFT_UP] = MouseUpCommandHandler("left")
-        self._handlers[CommandConstants.RIGHT_DOWN] = MouseDownCommandHandler("right")
-        self._handlers[CommandConstants.RIGHT_UP] = MouseUpCommandHandler("right")
+        self._handlers[CommandConstants.LEFT_DOWN] = MouseDownCommandHandler(
+            Button.left
+        )
+        self._handlers[CommandConstants.LEFT_UP] = MouseUpCommandHandler(Button.left)
+        self._handlers[CommandConstants.RIGHT_DOWN] = MouseDownCommandHandler(
+            Button.right
+        )
+        self._handlers[CommandConstants.RIGHT_UP] = MouseUpCommandHandler(Button.right)
         self._handlers[CommandConstants.SCROLL] = ScrollCommandHandler()
 
     def dispatch(self, command: str, args: List[str]) -> None:

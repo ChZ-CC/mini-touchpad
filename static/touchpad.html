@@ -85,7 +85,6 @@
         let lastX = 0, lastY = 0;
         let startX = 0, startY = 0;
         let isDragging = false;
-        let lastTwoFingerY = 0; // 双指滑动的初始Y坐标
         let currentTouchCount = 0; // 当前触摸手指数量
         const touchArea = document.getElementById('touch-area');
 
@@ -133,113 +132,62 @@
                 lastY = touch.clientY;
                 isDragging = false;
             }
-            if (e.touches.length === 2) {
-                // 双指触摸
-                console.log('双指触摸开始');
-                // 计算双指初始距离
-                const touch1 = e.touches[0];
-                const touch2 = e.touches[1];
-                // 记录双指初始Y坐标（用于滚轮）
-                const avgY = (touch1.clientY + touch2.clientY) / 2;
-                lastTwoFingerY = avgY;
-            }
         });
 
         // 消息合并和节流
         let moveTimer = null;
-        let accumulatedDx = 0;
-        let accumulatedDy = 0;
-        let moveFrame = null; // 替代 moveTimer
 
         // 监听触摸滑动事件
         touchArea.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            const isScroll = currentTouchCount === 2 || e.touches.length === 2;
-            if (isScroll) {
-                currentTouchCount = 2;
+
+            // 检查是否超过点击阈值
+            const touch = e.touches[0];
+            const distance = Math.sqrt(
+                Math.pow(touch.clientX - startX, 2) +
+                Math.pow(touch.clientY - startY, 2)
+            );
+
+            if (distance > CLICK_THRESHOLD) {
+                isDragging = true;
+            } else {
+                return;
             }
 
-            if (!isScroll) {
-                // 单指触摸 - 鼠标移动
-                const touch = e.touches[0];
-                // 计算偏移量（乘以系数调整灵敏度）
-                const dx = (touch.clientX - lastX) * MOUSE_SPEED;
-                const dy = (touch.clientY - lastY) * MOUSE_SPEED;
+            // 计算偏移量（乘以系数调整灵敏度）
+            let dx = touch.clientX - lastX;
+            let dy = touch.clientY - lastY;
 
-                // 检查是否超过点击阈值
-                const distance = Math.sqrt(
-                    Math.pow(touch.clientX - startX, 2) +
-                    Math.pow(touch.clientY - startY, 2)
-                );
-
-                if (distance > CLICK_THRESHOLD) {
-                    isDragging = true;
-                } else {
-                    lastX = touch.clientX;
-                    lastY = touch.clientY;
-                    return;
-                }
-
-                // 累积移动量
-                accumulatedDx += dx;
-                accumulatedDy += dy;
-
-                // 清除之前的定时器
-                if (moveTimer) {
-                    clearTimeout(moveTimer);
-                }
-
-                // 设置新的定时器，16ms发送一次合并后的消息（约60fps）
-                moveTimer = setTimeout(() => {
-                    if (Math.abs(accumulatedDx) > 0 || Math.abs(accumulatedDy) > 0) {
-                        // 发送合并后的鼠标移动指令
-                        const moveCommand = CMD.MOVE + `${accumulatedDx},${accumulatedDy}`;
-                        // 发送数据
-                        sendCommand(moveCommand);
-                        // 重置累积量
-                        accumulatedDx = 0;
-                        accumulatedDy = 0;
-                    }
-                }, 16);
-
-                // 更新上次坐标
-                lastX = touch.clientX;
-                lastY = touch.clientY;
-            } else if (isScroll) {
-                // 双指触摸 - 鼠标滚轮
-                console.log('双指滑动');
-                const touch1 = e.touches[0];
-                const touch2 = e.touches[1];
-
-                // 计算双指当前Y坐标的平均值
-                const currentAvgY = (touch1.clientY + touch2.clientY) / 2;
-
-                // 计算Y方向的偏移量
-                const deltaY = currentAvgY - lastTwoFingerY;
-
-                // 如果偏移量足够大，发送滚轮指令
-                if (Math.abs(deltaY) > 5) {
-                    // 计算滚动量（负值为向上滚动，正值为向下滚动）
-                    const scrollAmount = Math.round(deltaY) * MOUSE_SPEED * 2;
-                    console.log('发送滚轮指令:', scrollAmount);
-                    sendCommand(CMD.SCROLL + scrollAmount);
-                    // 更新上次双指Y坐标
-                    lastTwoFingerY = currentAvgY;
-                    lastX = (touch1.clientX + touch2.clientX) / 2;
-                    lastY = (touch1.clientY + touch2.clientY) / 2;
-                }
+            // 清除之前的定时器
+            if (moveTimer) {
+                clearTimeout(moveTimer);
             }
+            // 设置新的定时器，16ms发送一次合并后的消息（约60fps）
+            moveTimer = setTimeout(() => {
+                if (currentTouchCount === 1) {
+                    // 鼠标移动
+                    dx = dx * MOUSE_SPEED;
+                    dy = dy * MOUSE_SPEED;
+                    const moveCommand = CMD.MOVE + `${dx},${dy}`;
+                    // 发送数据
+                    sendCommand(moveCommand);
+                } else if (currentTouchCount === 2) {
+                    // 双指滚轮
+                    const scrollCommand = CMD.SCROLL + `${dx},${dy}`;
+                    sendCommand(scrollCommand);
+                }
+            }, MESSAGE_INTERVAL);
+
+            // 更新上次坐标
+            lastX = touch.clientX;
+            lastY = touch.clientY;
         });
 
         // 监听触摸结束事件
         touchArea.addEventListener('touchend', (e) => {
-            console.log('触摸结束，触点数:', e.touches.length);
             e.preventDefault();
 
-            if (e.touches.length === 0) {
-                // 所有手指都离开屏幕
-                console.log('当前触摸数量:', currentTouchCount);
-
+            if (e.touches.length === 0 && !isDragging) {
                 if (currentTouchCount === 1) {
                     // 单指离开屏幕 - 检查是否是单指点击
                     const distance = Math.sqrt(
@@ -247,7 +195,7 @@
                         Math.pow(lastY - startY, 2)
                     );
 
-                    if (!isDragging && distance <= CLICK_THRESHOLD) {
+                    if (distance <= CLICK_THRESHOLD) {
                         // 是单指点击操作
                         console.log('执行单指点击（左键）');
                         // 模拟点击：按下后立即抬起
@@ -264,7 +212,7 @@
                         Math.pow(lastY - startY, 2)
                     );
 
-                    if (!isDragging && distance <= CLICK_THRESHOLD) {
+                    if (distance <= CLICK_THRESHOLD) {
                         // 是双指点击操作
                         console.log('执行双指点击（右键）');
                         // 模拟点击：按下后立即抬起

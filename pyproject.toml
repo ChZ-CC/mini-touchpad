@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pyautogui>=0.9.54",
+    "pynput>=1.8.2",
     "python-dotenv>=1.2.2",
     "websockets>=16.0",
 ]
