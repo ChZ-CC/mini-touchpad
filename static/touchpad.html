@@ -26,6 +26,26 @@
             justify-content: space-around;
             padding: 10px;
             background: #222;
+            align-items: center;
+        }
+
+        .speed-control {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+            color: #555;
+        }
+
+        .speed-label {
+            color: #fff;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        #mouse-speed-input {
+            flex: 1;
+            min-width: 80px;
         }
 
         .control-btn {
@@ -55,6 +75,10 @@
 
 <body>
     <div id="control-buttons">
+        <div class="speed-control">
+            <span class="speed-label">灵敏度</span>
+            <input type="range" id="mouse-speed-input" min="1" max="10" value="3" step="0.1">
+        </div>
         <button class="control-btn" id="left-click">左键</button>
         <button class="control-btn" id="right-click">右键</button>
     </div>
@@ -71,8 +95,11 @@
             SCROLL: 'scroll|'
         };
 
-        // 设置鼠标移动速度（数值越小越灵敏）
-        const MOUSE_SPEED = 3.0;
+        // 获取鼠标移动速度（从input输入获取，数值越小越灵敏）
+        function getMouseSpeed() {
+            return parseFloat(document.getElementById('mouse-speed-input').value);
+        }
+
         // 点击阈值（像素）
         const CLICK_THRESHOLD = 10;
         const MESSAGE_INTERVAL = 16;
@@ -166,8 +193,8 @@
             moveTimer = setTimeout(() => {
                 if (currentTouchCount === 1) {
                     // 鼠标移动
-                    dx = dx * MOUSE_SPEED;
-                    dy = dy * MOUSE_SPEED;
+                    dx = dx * getMouseSpeed();
+                    dy = dy * getMouseSpeed();
                     const moveCommand = CMD.MOVE + `${dx},${dy}`;
                     // 发送数据
                     sendCommand(moveCommand);
