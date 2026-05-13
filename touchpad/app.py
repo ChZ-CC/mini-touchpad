@@ -3,7 +3,10 @@
 整合所有模块，提供应用入口。
 """
 
+import os
+import ssl
 from datetime import datetime
+from typing import Optional
 
 from .config import config
 from .handlers import CommandDispatcher
@@ -11,6 +14,8 @@ from .log import get_logger
 from .network import WebSocketServer
 from .network import HTTPServer
 from .utils import get_local_ip
+from .utils import load_ssl_context
+from .utils import generate_self_signed_cert
 
 logger = get_logger(__name__)
 
@@ -23,8 +28,48 @@ class TouchpadApplication:
 
     def __init__(self):
         self._command_dispatcher = CommandDispatcher()
-        self.http_server = HTTPServer(host="0.0.0.0", port=config.http_port)
-        self.websocket_server = WebSocketServer(config, self._handle_message)
+        ssl_context = None
+        if config.enable_ssl:
+            try:
+                ssl_context = load_ssl_context(
+                    cert_file=config.ssl_cert_file,
+                    key_file=config.ssl_key_file,
+                )
+            except Exception as e:
+                logger.error(f"加载SSL上下文失败: {e}")
+
+        self.http_server = HTTPServer(
+            host="0.0.0.0",
+            port=config.http_port,
+            ssl_context=ssl_context,
+        )
+        self.websocket_server = WebSocketServer(
+            config,
+            self._handle_message,
+            ssl_context=ssl_context,
+        )
+
+    def _load_ssl_context(self) -> Optional[ssl.SSLContext]:
+        ssl_context = None
+        if not os.path.exists(config.ssl_cert_file):
+            try:
+                logger.info("不存在SSL证书，生成自签名证书。")
+                generate_self_signed_cert(
+                    cert_file=config.ssl_cert_file,
+                    key_file=config.ssl_key_file,
+                )
+            except Exception as e:
+                logger.error(f"生成自签名证书失败: {e}")
+                return None
+        try:
+            ssl_context = load_ssl_context(
+                cert_file=config.ssl_cert_file,
+                key_file=config.ssl_key_file,
+            )
+        except Exception as e:
+            logger.error(f"加载SSL上下文失败: {e}")
+
+        return ssl_context
 
     async def _handle_message(self, message: str) -> None:
         """处理接收到的消息
@@ -62,7 +107,8 @@ class TouchpadApplication:
         ip = get_local_ip()
         print("=== 手机触控板服务已启动 ===")
         print(f"1. 电脑IP地址：{ip}")
-        print(f"2. 手机浏览器访问：http://{ip}:{config.http_port}")
+        proxy = "https" if config.enable_ssl else "http"
+        print(f"2. 手机浏览器访问：{proxy}://{ip}:{config.http_port}")
         print("3. 确保手机和电脑连接同一WiFi")
         print("==========================")
 

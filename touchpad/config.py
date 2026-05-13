@@ -34,6 +34,14 @@ class Config:
         self.websocket_port: int = int(os.getenv("WEBSOCKET_PORT", "9877"))
         self.ping_interval: int = int(os.getenv("PING_INTERVAL", "30"))
         self.ping_timeout: int = int(os.getenv("PING_TIMEOUT", "3"))
+        self.enable_ssl: bool = os.getenv("ENABLE_SSL", "false") in [
+            "True",
+            "true",
+            "1",
+            "t",
+        ]
+        self.ssl_cert_file: str = os.getenv("SSL_CERT_FILE", "cert.pem")
+        self.ssl_key_file: str = os.getenv("SSL_KEY_FILE", "key.pem")
         self.debug_mode: bool = os.getenv("DEBUG_MODE", "false") in [
             "True",
             "true",

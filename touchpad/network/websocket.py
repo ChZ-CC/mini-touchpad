@@ -5,9 +5,9 @@
 
 import asyncio
 import http
-import signal
+import ssl
 import websockets
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, Optional
 from touchpad.config import Config
 from touchpad.log import get_logger
 
@@ -53,21 +53,20 @@ class WebSocketConnection:
         try:
             await self._message_processor()
         except websockets.exceptions.ConnectionClosedError:
-            logger.warning("[message_receiver]连接异常关闭")
+            logger.debug(f"[handle] 连接异常关闭: {websocket.remote_address}")
+        except (ConnectionResetError, OSError) as e:
+            # 处理网络异常（如WinError 64：指定的网络名不再可用）
+            logger.debug(f"[handle] 网络异常: {e}")
+        except Exception as e:
+            logger.error(f"[handle] 未处理的异常: {type(e).__name__}: {e}")
         finally:
-            logger.debug(
-                f"[message_receiver] cancelling [message_receiver]: {websocket.remote_address}"
-            )
+            logger.debug(f"[handle] 清理连接资源: {websocket.remote_address}")
             receiver_task.cancel()
-            logger.debug(
-                f"[message_receiver] status: cancelled={receiver_task.cancelled()} done={receiver_task.done()}"
-            )
             try:
-                logger.debug(f"[message_receiver] waitting")
                 await receiver_task
             except asyncio.CancelledError:
-                logger.debug(f"[message_receiver] cancelled!")
                 pass
+            logger.debug(f"[handle] 连接已关闭: {websocket.remote_address}")
 
 
 class WebSocketServer:
@@ -80,23 +79,39 @@ class WebSocketServer:
         self,
         config: Config,
         message_handler: Callable[[str], Awaitable[None]],
+        ssl_context: Optional[ssl.SSLContext] = None,
     ):
         self._config = config
         self._message_handler = message_handler
         self._server = None
         self._serve_task = None
+        self._ssl_context = ssl_context
 
     async def start(self) -> None:
         """启动WebSocket服务器"""
         logger.info(f"启动WebSocket服务器: 0.0.0.0:{self._config.websocket_port}")
         connection = WebSocketConnection(self._message_handler, self._config)
-        self._server = await websockets.serve(
-            connection.handle,
-            "0.0.0.0",
-            self._config.websocket_port,
-            ping_interval=self._config.ping_interval,
-            ping_timeout=self._config.ping_timeout,
-        )
+
+        if self._ssl_context:
+            logger.info("使用 SSL 上下文启动 WSS 服务器")
+            self._server = await websockets.serve(
+                connection.handle,
+                "0.0.0.0",
+                self._config.websocket_port,
+                ping_interval=self._config.ping_interval,
+                ping_timeout=self._config.ping_timeout,
+                ssl=self._ssl_context,  # 启用 SSL
+            )
+        else:
+            logger.info("启动普通 WebSocket 服务器")
+            self._server = await websockets.serve(
+                connection.handle,
+                "0.0.0.0",
+                self._config.websocket_port,
+                ping_interval=self._config.ping_interval,
+                ping_timeout=self._config.ping_timeout,
+            )
+
         self._serve_task = asyncio.create_task(self._server.serve_forever())
         stop = asyncio.get_running_loop().create_future()
         try:

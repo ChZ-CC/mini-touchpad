@@ -1,8 +1,9 @@
-"""HTTP服务器
+"""HTTP/HTTPS服务器
 
-提供HTTP服务，用于提供前端页面。
+提供HTTP/HTTPS服务，用于提供前端页面。
 """
 
+import ssl
 from http.server import HTTPServer as StdlibHTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 from typing import Optional
@@ -34,21 +35,33 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
 
 
 class HTTPServer:
-    """HTTP服务器
+    """HTTP/HTTPS服务器
 
-    提供HTTP服务，用于提供前端页面。
+    提供HTTP/HTTPS服务，用于提供前端页面。
     """
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 9876):
+    def __init__(
+        self,
+        host: str = "0.0.0.0",
+        port: int = 9876,
+        ssl_context: Optional[ssl.SSLContext] = None,
+    ):
         self._host = host
         self._port = port
         self._server: Optional[StdlibHTTPServer] = None
         self._thread: Optional[Thread] = None
+        self._ssl_context = ssl_context
 
     def start(self) -> None:
-        """启动HTTP服务器"""
+        """启动HTTP/HTTPS服务器"""
         logger.info(f"[http_server] 启动HTTP服务器: {self._host}:{self._port}")
         self._server = StdlibHTTPServer((self._host, self._port), HTTPRequestHandler)
+
+        if self._ssl_context:
+            self._server.socket = self._ssl_context.wrap_socket(
+                self._server.socket, server_side=True
+            )
+
         self._thread = Thread(target=self._server.serve_forever)
         self._thread.daemon = True
         self._thread.start()
@@ -80,9 +93,3 @@ def prepare_html(html_content: str) -> str:
     for old, new in replacements.items():
         html_content = html_content.replace(old, new)
     return html_content
-
-
-def start_http_server(host: str = "localhost", port: int = 9876) -> None:
-    """启动HTTP服务器"""
-    http_server = HTTPServer(host=host, port=port)
-    http_server.start()

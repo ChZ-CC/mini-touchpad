@@ -66,6 +66,10 @@
             background: #555;
         }
 
+        .control-btn.active {
+            background: #4CAF50;
+        }
+
         /* 隐藏滚动条 */
         ::-webkit-scrollbar {
             display: none;
@@ -79,7 +83,7 @@
             <span class="speed-label">灵敏度</span>
             <input type="range" id="mouse-speed-input" min="1" max="10" value="3" step="0.1">
         </div>
-        <button class="control-btn" id="left-click">左键</button>
+        <button class="control-btn" id="toggle-gypro">陀螺仪</button>
         <button class="control-btn" id="right-click">右键</button>
     </div>
     <div id="touch-area"></div>
@@ -106,14 +110,19 @@
         const WEBSOCKET_PORT = 9877;
         const DEBUG_MODE = false;
 
+        // 陀螺仪相关变量
+        let isGyroEnabled = false;
+        const gyroThreshold = 0.25; // 陀螺仪灵敏度阈值
+
         // 连接电脑的WebSocket服务（使用当前页面的IP地址）
-        const ws = new WebSocket('ws://' + window.location.hostname + ':' + WEBSOCKET_PORT);
+        const ws = new WebSocket('wss://' + window.location.hostname + ':' + WEBSOCKET_PORT);
 
         let lastX = 0, lastY = 0;
         let startX = 0, startY = 0;
         let isDragging = false;
         let currentTouchCount = 0; // 当前触摸手指数量
         const touchArea = document.getElementById('touch-area');
+        const gyroBtn = document.getElementById('toggle-gypro');
 
         // WebSocket连接状态
         ws.onopen = () => {
@@ -260,15 +269,82 @@
             alert('连接失败！请检查：\n1. 电脑和手机同WiFi\n2. 电脑IP填写正确\n3. 服务已启动');
         };
 
-        // 控制按钮事件处理
-        document.getElementById('left-click').addEventListener('click', () => {
-            console.log('执行左键点击');
-            sendCommand(CMD.LEFT_DOWN);
-            setTimeout(() => {
-                sendCommand(CMD.LEFT_UP);
-            }, 50);
+        // 陀螺仪处理函数
+        function handleGyroscope(event) {
+            if (!isGyroEnabled) return;
+
+            const rot = event.rotationRate;
+            if (!rot) return;
+
+            const alpha = rot.alpha; // Z轴旋转（0-360度）
+            const beta = rot.beta;   // X轴倾斜（-180到180度）
+            const gamma = rot.gamma; // Y轴倾斜（-90到90度）
+
+            // 计算变化量
+            let dx = -gamma * getMouseSpeed() * 0.5;
+            let dy = -alpha * getMouseSpeed() * 0.5;
+            dx = Math.abs(dx) < gyroThreshold ? 0 : dx - Math.sign(dx) * gyroThreshold;
+            dy = Math.abs(dy) < gyroThreshold ? 0 : dy - Math.sign(dy) * gyroThreshold;
+
+            // 检查是否超过阈值
+            if (dx !== 0 || dy !== 0) {
+                const moveCommand = CMD.MOVE + `${dx},${dy}`;
+                sendCommand(moveCommand);
+            }
+        }
+
+        // 陀螺仪切换
+        gyroBtn.addEventListener('click', () => {
+            isGyroEnabled = !isGyroEnabled;
+
+            if (isGyroEnabled) {
+                // 检查浏览器是否支持
+                if (typeof DeviceMotionEvent === 'undefined') {
+                    alert('您的浏览器不支持陀螺仪功能，请使用手机浏览器');
+                    isGyroEnabled = false;
+                    gyroBtn.classList.remove('active');
+                    gyroBtn.textContent = '陀螺仪';
+                    return;
+                }
+
+                // 开启陀螺仪
+                gyroBtn.classList.add('active');
+                gyroBtn.textContent = '陀螺仪 ON';
+
+                // 请求权限（某些浏览器需要）
+                if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                    DeviceMotionEvent.requestPermission()
+                        .then(permission => {
+                            if (permission === 'granted') {
+                                window.addEventListener('devicemotion', handleGyroscope);
+                            } else {
+                                alert('请允许陀螺仪权限');
+                                isGyroEnabled = false;
+                                gyroBtn.classList.remove('active');
+                                gyroBtn.textContent = '陀螺仪';
+                            }
+                        })
+                        .catch(err => {
+                            console.error('陀螺仪权限请求失败:', err);
+                            alert('陀螺仪权限请求失败' + err);
+                            isGyroEnabled = false;
+                            gyroBtn.classList.remove('active');
+                            gyroBtn.textContent = '陀螺仪';
+                        });
+                } else {
+                    // 不需要权限的浏览器
+                    window.addEventListener('devicemotion', handleGyroscope);
+                }
+
+            } else {
+                // 关闭陀螺仪
+                gyroBtn.classList.remove('active');
+                gyroBtn.textContent = '陀螺仪';
+                window.removeEventListener('devicemotion', handleGyroscope);
+            }
         });
 
+        // 右键点击按钮
         document.getElementById('right-click').addEventListener('click', () => {
             console.log('执行右键点击');
             sendCommand(CMD.RIGHT_DOWN);

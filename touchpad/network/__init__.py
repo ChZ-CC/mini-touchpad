@@ -5,12 +5,10 @@
 
 from .websocket import start_websocket_server
 from .websocket import WebSocketServer
-from .http import start_http_server
 from .http import HTTPServer
 
 __all__ = [
     "start_websocket_server",
     "WebSocketServer",
-    "start_http_server",
     "HTTPServer",
 ]
