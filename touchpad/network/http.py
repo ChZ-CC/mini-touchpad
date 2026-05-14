@@ -84,7 +84,6 @@ def prepare_html(html_content: str) -> str:
     from touchpad.config import config
 
     replacements = {
-        "const MOUSE_SPEED = 3.0;": f"const MOUSE_SPEED = {config.mouse_speed};",
         "const CLICK_THRESHOLD = 10;": f"const CLICK_THRESHOLD = {config.click_threshold};",
         "const MESSAGE_INTERVAL = 16;": f"const MESSAGE_INTERVAL = {config.message_interval};",
         "const WEBSOCKET_PORT = 9877;": f"const WEBSOCKET_PORT = {config.websocket_port};",

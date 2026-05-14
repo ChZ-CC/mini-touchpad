@@ -16,7 +16,6 @@ def test_config_defaults():
     """测试默认配置值"""
     print("测试默认配置值...", end=" ")
     config = Config()
-    assert config.mouse_speed == 3.0, "mouse_speed 默认值错误"
     assert config.message_interval == 16, "message_interval 默认值错误"
     assert config.click_threshold == 1, "click_threshold 默认值错误"
     assert config.http_port == 9876, "http_port 默认值错误"

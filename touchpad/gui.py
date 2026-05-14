@@ -82,7 +82,6 @@ class TouchpadGUI:
 
         # 配置项
         config_items = [
-            ("鼠标速度", "mouse_speed", 0.1, 10.0, 0.1),
             ("消息间隔(ms)", "message_interval", 1, 100, 1),
             ("点击阈值(像素)", "click_threshold", 1, 50, 1),
             ("HTTP端口", "http_port", 1024, 65535, 1),

@@ -92,7 +92,6 @@ class TouchpadApplication:
             logger.debug("调试模式已启用")
             print(
                 f"当前配置：\n"
-                f"\tMOUSE_SPEED={config.mouse_speed}\n"
                 f"\tMESSAGE_INTERVAL={config.message_interval}\n"
                 f"\tCLICK_THRESHOLD={config.click_threshold}\n"
                 f"\tHTTP_PORT={config.http_port}\n"

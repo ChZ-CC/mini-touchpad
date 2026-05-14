@@ -27,7 +27,6 @@ class Config:
         self._initialized = True
 
         dotenv.load_dotenv()
-        self.mouse_speed: float = float(os.getenv("MOUSE_SPEED", "3.0"))
         self.message_interval: int = int(os.getenv("MESSAGE_INTERVAL", "16"))
         self.click_threshold: int = int(os.getenv("CLICK_THRESHOLD", "1"))
         self.http_port: int = int(os.getenv("HTTP_PORT", "9876"))
