@@ -23,7 +23,7 @@ class Logger:
         logger.setLevel(config.log_level)
 
         # 阻止日志传播到父 logger，避免重复记录
-        # logger.propagate = False
+        logger.propagate = False
 
         # 避免重复添加处理器
         if logger.handlers:
@@ -34,12 +34,7 @@ class Logger:
         log_dir.mkdir(exist_ok=True)
 
         # 文件处理器 - 所有级别都写入文件
-        file_handler = RotatingFileHandler(
-            log_dir / "touchpad.log",
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5,
-            encoding="utf-8",
-        )
+        file_handler = cls.windows_compatible_handler(log_dir / "touchpad.log")
         file_handler.setLevel(config.log_level)
         file_formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -57,6 +52,46 @@ class Logger:
 
         cls._loggers[name] = logger
         return logger
+
+    @classmethod
+    def windows_compatible_handler(cls, filename):
+        """创建适合 Windows 的日志处理器，解决文件锁定问题"""
+        import os
+
+        class WindowsSafeRotatingFileHandler(RotatingFileHandler):
+            def doRollover(self):
+                """重写日志轮转方法以解决 Windows 文件锁定问题"""
+                if self.stream:
+                    self.stream.close()
+                    self.stream = None
+
+                # 检查基础文件是否存在
+                if os.path.exists(self.baseFilename):
+                    # 轮转备份文件
+                    for i in range(self.backupCount - 1, 0, -1):
+                        sfn = self.rotation_filename(f"{self.baseFilename}.{i}")
+                        dfn = self.rotation_filename(f"{self.baseFilename}.{i + 1}")
+                        if os.path.exists(sfn):
+                            if os.path.exists(dfn):
+                                os.unlink(dfn)  # 使用 unlink 替代 remove
+                            os.rename(sfn, dfn)
+
+                    # 重命名当前日志文件
+                    dfn = self.rotation_filename(f"{self.baseFilename}.1")
+                    if os.path.exists(dfn):
+                        os.unlink(dfn)  # 使用 unlink 替代 remove
+                    os.rename(self.baseFilename, dfn)
+
+                # 重新打开流
+                self.stream = self._open()
+
+        return WindowsSafeRotatingFileHandler(
+            filename,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+            encoding="utf-8",
+            delay=True,  # 延迟打开文件直到第一次写入
+        )
 
 
 def get_logger(name: str = "touchpad") -> logging.Logger:
