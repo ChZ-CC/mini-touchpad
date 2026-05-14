@@ -30,13 +30,7 @@ class TouchpadApplication:
         self._command_dispatcher = CommandDispatcher()
         ssl_context = None
         if config.enable_ssl:
-            try:
-                ssl_context = load_ssl_context(
-                    cert_file=config.ssl_cert_file,
-                    key_file=config.ssl_key_file,
-                )
-            except Exception as e:
-                logger.error(f"加载SSL上下文失败: {e}")
+            ssl_context = self._load_ssl_context()
 
         self.http_server = HTTPServer(
             host="0.0.0.0",
