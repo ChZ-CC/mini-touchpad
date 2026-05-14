@@ -3,6 +3,7 @@
 提供鼠标移动、按下、抬起等命令的具体实现。
 """
 
+import time
 from typing import List
 
 import pynput
@@ -23,23 +24,15 @@ class MoveCommandHandler(CommandHandler):
             mouse.move(dx, dy)
 
 
-class MouseDownCommandHandler(CommandHandler):
-    """鼠标按下命令处理器"""
+class MouseClickCommandHandler(CommandHandler):
+    """鼠标点击命令处理器"""
 
     def __init__(self, button: Button):
         self.button = button
 
     def execute(self, args: List[str]) -> None:
         mouse.press(button=self.button)
-
-
-class MouseUpCommandHandler(CommandHandler):
-    """鼠标抬起命令处理器"""
-
-    def __init__(self, button: Button):
-        self.button = button
-
-    def execute(self, args: List[str]) -> None:
+        time.sleep(0.05)  # 确保按下事件被系统识别
         mouse.release(button=self.button)
 
 

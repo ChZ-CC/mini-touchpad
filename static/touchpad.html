@@ -6,19 +6,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>手机触控板</title>
     <style>
+        html,
         body {
             margin: 0;
-            height: 100vh;
+            padding: 0;
+            height: 100%;
+            width: 100%;
             background: #111;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
+            /* 防止出现滚动条 */
+            -webkit-overflow-scrolling: touch;
+            /* iOS平滑滚动 */
         }
 
-        #touch-area {
+        body {
+            height: 100vh;
+            min-height: -webkit-fill-available;
+            /* 适配iOS Safari */
+            min-height: -moz-available;
+            /* 适配Firefox */
+            min-height: fill-available;
+            /* 标准语法 */
+        }
+
+        .touch-area {
             flex: 1;
             width: 100%;
             background: #ffffff00;
             z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #footer {
+            background: #222;
+            padding: 10px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         #control-buttons {
@@ -45,17 +73,16 @@
 
         #mouse-speed-input {
             flex: 1;
-            min-width: 80px;
+            min-width: 60px;
         }
 
         .control-btn {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
+            padding: 6px;
+            border-radius: 4px;
             background: #333;
             color: white;
             border: none;
-            font-size: 14px;
+            font-size: 12px;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -74,6 +101,42 @@
         ::-webkit-scrollbar {
             display: none;
         }
+
+        #connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #555;
+            font-size: 14px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-connected .status-indicator {
+            background-color: #4CAF50;
+            /* 绿色 */
+        }
+
+        .status-connected .status-text {
+            color: #4CAF50;
+            /* 绿色 */
+        }
+
+        .status-disconnected .status-indicator {
+            background-color: #999;
+            /* 灰色 */
+        }
+
+        .status-disconnected .status-text {
+            color: #999;
+            /* 灰色 */
+        }
     </style>
 </head>
 
@@ -84,18 +147,24 @@
             <input type="range" id="mouse-speed-input" min="1" max="10" value="3" step="0.1">
         </div>
         <button class="control-btn" id="toggle-gypro">陀螺仪</button>
-        <button class="control-btn" id="right-click">右键</button>
     </div>
-    <div id="touch-area"></div>
+    <div id="touch-area" class="touch-area">
+        <div class="touch-area"></div>
+        <div id="footer">
+            <div id="connection-status">
+                <span class="status-indicator"></span>
+                <span class="status-text">未连接</span>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         // 指令常量
         const CMD = {
             MOVE: 'move|',
-            LEFT_DOWN: 'left_down|',
-            LEFT_UP: 'left_up|',
-            RIGHT_DOWN: 'right_down|',
-            RIGHT_UP: 'right_up|',
+            LEFT_CLICK: 'left_click|',
+            RIGHT_CLICK: 'right_click|',
             SCROLL: 'scroll|'
         };
 
@@ -112,10 +181,25 @@
 
         // 陀螺仪相关变量
         let isGyroEnabled = false;
-        const gyroThreshold = 0.25; // 陀螺仪灵敏度阈值
+        const gyroThreshold = 0.5; // 陀螺仪灵敏度阈值
 
-        // 连接电脑的WebSocket服务（使用当前页面的IP地址）
-        const ws = new WebSocket('wss://' + window.location.hostname + ':' + WEBSOCKET_PORT);
+        // WebSocket连接参数
+        let ws;
+        let reconnectInterval = 1000; // 初始重连间隔1秒
+        let maxReconnectInterval = 30000; // 最大重连间隔30秒
+        let reconnectDecay = 1.5; // 重连间隔递增倍数
+        let reconnectTimeoutId = null;
+        let heartbeatIntervalId = null;
+        let isManualClose = false; // 标记是否为手动关闭
+        let isReconnecting = false; // 标记是否正在重连中，防止重复触发
+
+        // 创建WebSocket连接
+        function createWebSocket() {
+            return new WebSocket('wss://' + window.location.hostname + ':' + WEBSOCKET_PORT);
+        }
+
+        // 初始化WebSocket连接
+        ws = createWebSocket();
 
         let lastX = 0, lastY = 0;
         let startX = 0, startY = 0;
@@ -124,18 +208,141 @@
         const touchArea = document.getElementById('touch-area');
         const gyroBtn = document.getElementById('toggle-gypro');
 
-        // WebSocket连接状态
-        ws.onopen = () => {
-            console.log('WebSocket连接成功');
-            alert('连接成功！现在可以使用触控板了');
-        };
+        // 获取连接状态元素
+        const connectionStatus = document.getElementById('connection-status');
+        const statusText = connectionStatus.querySelector('.status-text');
 
-        ws.onclose = () => {
-            console.log('WebSocket连接关闭');
-        };
+        // 更新连接状态显示
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                connectionStatus.className = 'status-connected';
+                statusText.textContent = '已连接';
+            } else {
+                connectionStatus.className = 'status-disconnected';
+                statusText.textContent = '未连接';
+            }
+        }
+
+        // 初始化连接状态为未连接
+        updateConnectionStatus(false);
+
+        // 发送心跳
+        function sendHeartbeat() {
+            if (ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send('ping'); // 发送心跳包
+                } catch (e) {
+                    console.error('心跳发送失败:', e);
+                    // 心跳发送失败，触发重连
+                    if (!isManualClose) {
+                        reconnect();
+                    }
+                }
+            } else if (!isManualClose) {
+                // 连接未打开，触发重连
+                reconnect();
+            }
+        }
+
+        // 重连WebSocket
+        window.reconnect = function () {
+            if (isManualClose) return; // 如果是手动关闭，则不重连
+            if (isReconnecting) return; // 如果正在重连中，则不重复触发
+
+            console.log(`尝试重连... ${reconnectInterval}ms`);
+            updateConnectionStatus(false); // 显示为未连接状态
+            isReconnecting = true; // 标记为正在重连
+
+            // 清除之前的重连定时器
+            if (reconnectTimeoutId) {
+                clearTimeout(reconnectTimeoutId);
+            }
+
+            // 设置重连定时器
+            reconnectTimeoutId = setTimeout(() => {
+                ws = createWebSocket();
+                setupWebSocketHandlers();
+
+                // 指数退避算法增加重连间隔
+                reconnectInterval = Math.min(reconnectInterval * reconnectDecay, maxReconnectInterval);
+                isReconnecting = false; // 重置重连状态
+            }, reconnectInterval);
+        }
+
+        // 设置WebSocket事件处理器
+        function setupWebSocketHandlers() {
+            ws.onopen = () => {
+                console.log('WebSocket连接成功');
+                updateConnectionStatus(true); // 更新连接状态为已连接
+                reconnectInterval = 1000; // 重置重连间隔
+                isReconnecting = false; // 重置重连状态
+
+                // 启动心跳定时器
+                if (heartbeatIntervalId) {
+                    clearInterval(heartbeatIntervalId);
+                }
+                heartbeatIntervalId = setInterval(sendHeartbeat, 30000); // 每30秒发送一次心跳
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket连接关闭');
+                updateConnectionStatus(false); // 更新连接状态为未连接
+
+                // 如果不是手动关闭，则尝试重连
+                if (!isManualClose) {
+                    reconnect();
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket错误:', error);
+                updateConnectionStatus(false); // 更新连接状态为未连接
+
+                // 错误发生时触发重连
+                if (!isManualClose) {
+                    reconnect();
+                }
+            };
+        }
+
+        // 初始化WebSocket事件处理器
+        setupWebSocketHandlers();
+
+        // 页面可见性API - 当页面从后台恢复时尝试重连
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && ws.readyState !== WebSocket.OPEN && !isManualClose) {
+                // 页面变为可见且WebSocket未连接时，尝试重连
+                console.log('页面可见性改变，尝试重连...');
+                reconnect();
+            }
+        });
+
+        // 页面卸载前清理资源
+        window.addEventListener('beforeunload', () => {
+            isManualClose = true; // 标记为手动关闭，防止自动重连
+
+            // 清理定时器
+            if (reconnectTimeoutId) {
+                clearTimeout(reconnectTimeoutId);
+            }
+            if (heartbeatIntervalId) {
+                clearInterval(heartbeatIntervalId);
+            }
+
+            // 关闭WebSocket连接
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+        });
 
         // 发送指令
         function sendCommand(command) {
+            // 检查连接状态
+            if (ws.readyState !== WebSocket.OPEN) {
+                console.warn('WebSocket未连接，无法发送指令:', command);
+                return;
+            }
+
             let formatedCommand = command;
             if (DEBUG_MODE) {
                 const now = new Date();
@@ -149,7 +356,16 @@
                 const timeStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
                 formatedCommand = command + "|" + timeStr;
             }
-            ws.send(formatedCommand);
+
+            try {
+                ws.send(formatedCommand);
+            } catch (e) {
+                console.error('发送指令失败:', e);
+                // 发送失败时触发重连
+                if (!isManualClose) {
+                    reconnect();
+                }
+            }
         }
 
         // 监听触摸开始事件
@@ -209,7 +425,7 @@
                     sendCommand(moveCommand);
                 } else if (currentTouchCount === 2) {
                     // 双指滚轮
-                    const scrollCommand = CMD.SCROLL + `${dx},${dy}`;
+                    const scrollCommand = CMD.SCROLL + `${-dx},${dy}`;
                     sendCommand(scrollCommand);
                 }
             }, MESSAGE_INTERVAL);
@@ -235,11 +451,7 @@
                         // 是单指点击操作
                         console.log('执行单指点击（左键）');
                         // 模拟点击：按下后立即抬起
-                        sendCommand(CMD.LEFT_DOWN);
-                        // 短暂延迟后发送抬起指令
-                        setTimeout(() => {
-                            sendCommand(CMD.LEFT_UP);
-                        }, 50);
+                        sendCommand(CMD.LEFT_CLICK);
                     }
                 } else if (currentTouchCount === 2) {
                     // 双指离开屏幕 - 检查是否是双指点击
@@ -252,22 +464,14 @@
                         // 是双指点击操作
                         console.log('执行双指点击（右键）');
                         // 模拟点击：按下后立即抬起
-                        sendCommand(CMD.RIGHT_DOWN);
-                        // 短暂延迟后发送抬起指令
-                        setTimeout(() => {
-                            sendCommand(CMD.RIGHT_UP);
-                        }, 50);
+                        sendCommand(CMD.RIGHT_CLICK);
                     }
                 }
                 currentTouchCount = 0;
             }
         });
 
-        // 监听WebSocket连接错误
-        ws.onerror = (error) => {
-            console.error('WebSocket错误:', error);
-            alert('连接失败！请检查：\n1. 电脑和手机同WiFi\n2. 电脑IP填写正确\n3. 服务已启动');
-        };
+
 
         // 陀螺仪处理函数
         function handleGyroscope(event) {
@@ -309,7 +513,6 @@
 
                 // 开启陀螺仪
                 gyroBtn.classList.add('active');
-                gyroBtn.textContent = '陀螺仪 ON';
 
                 // 请求权限（某些浏览器需要）
                 if (typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -321,7 +524,6 @@
                                 alert('请允许陀螺仪权限');
                                 isGyroEnabled = false;
                                 gyroBtn.classList.remove('active');
-                                gyroBtn.textContent = '陀螺仪';
                             }
                         })
                         .catch(err => {
@@ -329,7 +531,6 @@
                             alert('陀螺仪权限请求失败' + err);
                             isGyroEnabled = false;
                             gyroBtn.classList.remove('active');
-                            gyroBtn.textContent = '陀螺仪';
                         });
                 } else {
                     // 不需要权限的浏览器
@@ -342,15 +543,6 @@
                 gyroBtn.textContent = '陀螺仪';
                 window.removeEventListener('devicemotion', handleGyroscope);
             }
-        });
-
-        // 右键点击按钮
-        document.getElementById('right-click').addEventListener('click', () => {
-            console.log('执行右键点击');
-            sendCommand(CMD.RIGHT_DOWN);
-            setTimeout(() => {
-                sendCommand(CMD.RIGHT_UP);
-            }, 50);
         });
     </script>
 </body>

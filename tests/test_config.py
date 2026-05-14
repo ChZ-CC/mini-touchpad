@@ -28,10 +28,7 @@ def test_command_constants():
     """测试命令常量"""
     print("测试命令常量...", end=" ")
     assert CommandConstants.MOVE == "move", "MOVE 常量错误"
-    assert CommandConstants.LEFT_DOWN == "left_down", "LEFT_DOWN 常量错误"
-    assert CommandConstants.LEFT_UP == "left_up", "LEFT_UP 常量错误"
-    assert CommandConstants.RIGHT_DOWN == "right_down", "RIGHT_DOWN 常量错误"
-    assert CommandConstants.RIGHT_UP == "right_up", "RIGHT_UP 常量错误"
+    assert CommandConstants.LEFT_CLICK == "left_click", "LEFT_CLICK 常量错误"
     print("✓ 通过")
 
 

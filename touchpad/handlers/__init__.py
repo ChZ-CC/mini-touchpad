@@ -6,15 +6,13 @@
 from .base import CommandHandler
 from .mouse import (
     MoveCommandHandler,
-    MouseDownCommandHandler,
-    MouseUpCommandHandler,
+    MouseClickCommandHandler,
 )
 from .dispatcher import CommandDispatcher
 
 __all__ = [
     "CommandHandler",
     "MoveCommandHandler",
-    "MouseDownCommandHandler",
-    "MouseUpCommandHandler",
+    "MouseClickCommandHandler",
     "CommandDispatcher",
 ]

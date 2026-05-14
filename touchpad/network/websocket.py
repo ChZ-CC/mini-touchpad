@@ -32,7 +32,11 @@ class WebSocketConnection:
 
     async def _message_receiver(self, websocket) -> None:
         """消息接收协程"""
-        async for message in websocket:
+        async for message in websocket:  # TODO ctrl+c 退出时，这里会抛出异常
+            if message == "ping":
+                logger.debug("收到心跳命令")
+                await websocket.send("pong")
+                continue
             if self._message_queue.full():
                 logger.debug("消息队列已满，丢弃旧消息")
                 self._message_queue.get_nowait()

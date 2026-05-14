@@ -62,10 +62,8 @@ class CommandConstants:
     """命令常量定义"""
 
     MOVE: Final[str] = "move"
-    LEFT_DOWN: Final[str] = "left_down"
-    LEFT_UP: Final[str] = "left_up"
-    RIGHT_DOWN: Final[str] = "right_down"
-    RIGHT_UP: Final[str] = "right_up"
+    LEFT_CLICK: Final[str] = "left_click"
+    RIGHT_CLICK: Final[str] = "right_click"
     SCROLL: Final[str] = "scroll"
 
 

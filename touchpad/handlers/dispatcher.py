@@ -9,8 +9,7 @@ from pynput.mouse import Button
 from .base import CommandHandler
 from .mouse import (
     MoveCommandHandler,
-    MouseDownCommandHandler,
-    MouseUpCommandHandler,
+    MouseClickCommandHandler,
     ScrollCommandHandler,
 )
 from touchpad.config import CommandConstants
@@ -32,14 +31,12 @@ class CommandDispatcher:
     def _register_handlers(self) -> None:
         """注册所有命令处理器"""
         self._handlers[CommandConstants.MOVE] = MoveCommandHandler()
-        self._handlers[CommandConstants.LEFT_DOWN] = MouseDownCommandHandler(
+        self._handlers[CommandConstants.LEFT_CLICK] = MouseClickCommandHandler(
             Button.left
         )
-        self._handlers[CommandConstants.LEFT_UP] = MouseUpCommandHandler(Button.left)
-        self._handlers[CommandConstants.RIGHT_DOWN] = MouseDownCommandHandler(
+        self._handlers[CommandConstants.RIGHT_CLICK] = MouseClickCommandHandler(
             Button.right
         )
-        self._handlers[CommandConstants.RIGHT_UP] = MouseUpCommandHandler(Button.right)
         self._handlers[CommandConstants.SCROLL] = ScrollCommandHandler()
 
     def dispatch(self, command: str, args: List[str]) -> None:
