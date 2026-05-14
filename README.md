@@ -1,46 +1,15 @@
 # Touchpad - 手机触控板
 
-一个基于WebSocket的手机触控板应用，允许用户通过手机浏览器控制电脑鼠标。
+极简网页版触控版应用，允许用户通过移动端浏览器控制电脑鼠标。
 
 ## 功能特性
 
 - 📱 手机浏览器作为触控板
-- 🖱️ 完整的鼠标控制（移动、点击、拖拽）
+- 🖱️ 鼠标控制（移动、点击、双击、陀螺仪控制）
 - ⚡ 低延迟响应（~100ms）
-- 🔒 心跳保活机制
+- 🔒 心跳保活机制，自动重连机制
 - 🎯 消息队列优化，防止积压
 - 🔧 可配置的参数
-- 📊 可选的调试模式
-
-## 项目结构
-
-```
-touch-pad/
-├── touchpad/              # 主包
-│   ├── __init__.py        # 包初始化
-│   ├── app.py             # 应用主类
-│   ├── config.py          # 配置管理
-│   ├── log.py             # 日志系统
-│   ├── utils.py           # 工具函数
-│   ├── handlers/          # 命令处理器
-│   │   ├── __init__.py
-│   │   ├── base.py        # 基类
-│   │   ├── mouse.py       # 鼠标命令
-│   │   └── dispatcher.py  # 命令分发
-│   └── network/           # 网络模块
-│       ├── __init__.py
-│       ├── http.py        # HTTP服务器
-│       └── websocket.py   # WebSocket服务器
-├── static/                # 静态文件
-│   └── touchpad.html     # 前端页面
-├── logs/                  # 日志目录
-├── docs/                  # 文档目录
-├── main.py               # 程序入口
-├── requirements.txt       # 依赖列表
-├── .env                  # 环境变量
-├── .env.example          # 环境变量示例
-└── README.md            # 本文件
-```
 
 ## 快速开始
 
@@ -50,7 +19,7 @@ touch-pad/
 pip install -r requirements.txt
 ```
 
-或使用 uv:
+或使用 uv（推荐使用）:
 
 ```bash
 uv sync
@@ -77,16 +46,38 @@ python main.py
 3. 在手机浏览器访问显示的URL
 4. 开始使用触控板
 
+### SSL配置（可选）
+
+如果要使用陀螺仪功能，需要启用HTTPS/WSS加密连接：
+
+1. 生成SSL证书：
+   ```bash
+   openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
+   ```
+   
+2. 在 `.env` 文件中启用SSL：
+   ```env
+   ENABLE_SSL=true
+   CERT_FILE=cert.pem
+   KEY_FILE=key.pem
+   ```
+
+3. 重启应用
+
 ## 配置说明
 
-| 参数             | 说明             | 默认值 |
-| ---------------- | ---------------- | ------ |
-| MOUSE_SPEED      | 鼠标移动速度     | 3.0    |
-| MESSAGE_INTERVAL | 消息发送间隔(ms) | 16     |
-| CLICK_THRESHOLD  | 点击阈值(像素)   | 1      |
-| HTTP_PORT        | HTTP服务端口     | 9876   |
-| WEBSOCKET_PORT   | WebSocket端口    | 9877   |
-| DEBUG_MODE       | 调试模式         | false  |
+| 参数             | 说明             | 默认值   |
+| ---------------- | ---------------- | -------- |
+| MOUSE_SPEED      | 鼠标移动速度     | 3.0      |
+| MESSAGE_INTERVAL | 消息发送间隔(ms) | 16       |
+| CLICK_THRESHOLD  | 点击阈值(像素)   | 1        |
+| HTTP_PORT        | HTTP服务端口     | 9876     |
+| WEBSOCKET_PORT   | WebSocket端口    | 9877     |
+| DEBUG_MODE       | 调试模式         | false    |
+| ENABLE_SSL       | 启用SSL加密      | false    |
+| CERT_FILE        | SSL证书文件路径  | cert.pem |
+| KEY_FILE         | SSL私钥文件路径  | key.pem  |
+| GYRO_THRESHOLD   | 陀螺仪灵敏度阈值 | 0.25     |
 
 ## 开发指南
 
@@ -115,8 +106,10 @@ class ScrollCommandHandler(CommandHandler):
 - Python 3.7+
 - asyncio - 异步编程
 - websockets - WebSocket 通信
-- pyautogui - 鼠标控制
+- pynput - 鼠标控制
 - python-dotenv - 环境变量管理
+- ssl - SSL/TLS加密
+- cryptography - 证书生成
 
 ## 性能优化
 
@@ -134,6 +127,14 @@ class ScrollCommandHandler(CommandHandler):
 MIT License
 
 ## 更新日志
+
+### v1.2.0 (2026-05-14)
+
+- ✨ 新增陀螺仪控制功能（手机倾斜控制鼠标）
+- 📶 新增连接状态指示器
+- 📱 优化移动端UI和体验
+- 🐛 修复Windows文件锁定问题
+- 🚀 优化WebSocket连接管理
 
 ### v1.1.0 (2026-03-25)
 
