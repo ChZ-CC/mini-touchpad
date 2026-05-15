@@ -4,13 +4,9 @@
 """
 
 import sys
-import pyautogui
 import asyncio
 
 from touchpad.app import app
-
-pyautogui.FAILSAFE = False
-
 
 if __name__ == "__main__":
     try:

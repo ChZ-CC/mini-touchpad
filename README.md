@@ -94,11 +94,9 @@ python main.py
 from touchpad.handlers.base import CommandHandler
 from typing import List
 
-class ScrollCommandHandler(CommandHandler):
+class YourCommandHandler(CommandHandler):
     def execute(self, args: List[str]) -> None:
-        if len(args) == 1:
-            clicks = int(args[0])
-            pyautogui.scroll(clicks)
+        ...
 ```
 
 ## 技术栈
