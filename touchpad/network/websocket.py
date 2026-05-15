@@ -32,10 +32,9 @@ class WebSocketConnection:
 
     async def _message_receiver(self, websocket) -> None:
         """消息接收协程"""
-        async for message in websocket:  # TODO ctrl+c 退出时，这里会抛出异常
+        async for message in websocket:
             if message == "ping":
-                logger.debug("收到心跳命令")
-                await websocket.send("pong")
+                logger.debug(f"收到心跳: from {websocket.remote_address}")
                 continue
             if self._message_queue.full():
                 logger.debug("消息队列已满，丢弃旧消息")
@@ -68,6 +67,8 @@ class WebSocketConnection:
             receiver_task.cancel()
             try:
                 await receiver_task
+            except websockets.exceptions.ConnectionClosedError as e:
+                logger.info(f"[handle] receive_task 连接异常关闭, 错误: {e}")
             except asyncio.CancelledError:
                 pass
             logger.debug(f"[handle] 连接已关闭: {websocket.remote_address}")
