@@ -20,8 +20,8 @@ class TouchpadGUI:
 
     def __init__(self, root, config: Config = config):
         self.root = root
-        self.root.title("Touchpad - 手机触控板服务")
-        self.root.geometry("600x500")
+        self.root.title("Touchpad - 手机触控板")
+        self.root.geometry("600x700")
         self.root.resizable(True, True)
 
         self.app = None
@@ -39,31 +39,65 @@ class TouchpadGUI:
 
     def _create_widgets(self):
         """创建界面组件"""
+        text_font = ("TkDefaultFont", 12)
+        log_font = ("TkDefaultFont", 10)
+        style = ttk.Style()
+        style.configure("Large.TButton", font=text_font)
+
         # 主框架
-        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame = ttk.Frame(self.root, padding="15")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # 服务状态区域
-        status_frame = ttk.LabelFrame(main_frame, text="服务状态", padding="10")
-        status_frame.pack(fill=tk.X, pady=5)
+        status_frame = ttk.LabelFrame(
+            main_frame,
+            text="服务状态",
+            padding="15",
+            width=300,
+            height=200,
+        )
+        status_frame.pack(fill=tk.X, pady=10)
 
         # 状态行
         status_row = ttk.Frame(status_frame)
-        status_row.pack(fill=tk.X, pady=2)
-        ttk.Label(status_row, text="当前状态:", width=10).pack(side=tk.LEFT, padx=5)
-        ttk.Label(
-            status_row, textvariable=self.status_var, width=20, foreground="red"
-        ).pack(side=tk.LEFT, padx=5)
+        status_row.pack(fill=tk.X, pady=5)
+
+        # 当前状态标签
+        status_label = ttk.Label(status_row, text="当前状态:", width=10, font=text_font)
+        status_label.pack(side=tk.LEFT, padx=5)
+
+        status_value_label = ttk.Label(
+            status_row,
+            textvariable=self.status_var,
+            foreground="red",
+            font=text_font,
+        )
+        status_value_label.pack(side=tk.LEFT, padx=5)
 
         # IP地址行
         ip_row = ttk.Frame(status_frame)
-        ip_row.pack(fill=tk.X, pady=2)
-        ttk.Label(ip_row, text="服务地址:", width=10).pack(side=tk.LEFT, padx=5)
-        ttk.Label(ip_row, textvariable=self.url_var).pack(side=tk.LEFT, padx=5)
+        ip_row.pack(fill=tk.X, pady=5)
+
+        ttk.Label(ip_row, text="服务地址:", width=10, font=text_font).pack(
+            side=tk.LEFT, padx=5, pady=5
+        )
+        ttk.Label(ip_row, textvariable=self.url_var, font=text_font).pack(
+            side=tk.LEFT, padx=5, pady=5
+        )
+
+        # 添加复制按钮
+        self.copy_btn = ttk.Button(ip_row, text="复制", command=self._copy_url, width=8)
+
+        # instruction
+        self.instruction_label = ttk.Label(
+            status_frame,
+            text="1. 确保手机和电脑连接同一WiFi网络\n2. 使用手机浏览器访问服务地址。",
+            font=log_font,
+        )
 
         # 配置区域
-        config_frame = ttk.LabelFrame(main_frame, text="配置信息", padding="10")
-        config_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        config_frame = ttk.LabelFrame(main_frame, text="配置信息", padding="15")
+        config_frame.pack(fill=tk.BOTH, pady=10)
 
         # 配置项
         self._create_form(
@@ -71,72 +105,96 @@ class TouchpadGUI:
             "message_interval",
             "消息间隔(ms)",
             self.config.message_interval,
+            text_font,
         )
         self._create_form(
             config_frame,
             "click_threshold",
             "点击阈值(像素)",
             self.config.click_threshold,
+            text_font,
         )
         self._create_form(
-            config_frame,
-            "http_port",
-            "HTTP端口",
-            self.config.http_port,
+            config_frame, "http_port", "HTTP端口", self.config.http_port, text_font
         )
         self._create_form(
             config_frame,
             "websocket_port",
             "WebSocket端口",
             self.config.websocket_port,
+            text_font,
         )
 
         # 调试模式
         debug_frame = ttk.Frame(config_frame)
-        debug_frame.pack(fill=tk.X, pady=2)
+        debug_frame.pack(fill=tk.X, pady=5)
 
-        ttk.Label(debug_frame, text="调试模式", width=15).pack(side=tk.LEFT, padx=5)
+        debug_label = ttk.Label(debug_frame, text="调试模式", width=18, font=text_font)
+        debug_label.pack(side=tk.LEFT, padx=5)
         self.debug_var = tk.BooleanVar(value=self.config.debug_mode)
         ttk.Checkbutton(debug_frame, variable=self.debug_var).pack(side=tk.LEFT, padx=5)
 
         # 控制按钮区域
         control_frame = ttk.Frame(main_frame)
-        control_frame.pack(fill=tk.X, pady=5)
+        control_frame.pack(fill=tk.X, pady=10)
 
         self.start_btn = ttk.Button(
-            control_frame, text="启动服务", command=self.start_service, width=15
+            control_frame,
+            text="启动服务",
+            command=self.start_service,
+            width=20,
+            padding=(10, 10),
+            style="Large.TButton",
+            cursor="hand2",
         )
-        self.start_btn.pack(side=tk.LEFT, padx=5)
+        self.start_btn.pack(side=tk.LEFT, padx=10)
 
         self.stop_btn = ttk.Button(
             control_frame,
             text="停止服务",
             command=self.stop_service,
-            width=15,
+            width=20,
+            padding=(10, 10),
             state=tk.DISABLED,
+            style="Large.TButton",
+            cursor="hand2",
         )
-        self.stop_btn.pack(side=tk.LEFT, padx=5)
+        self.stop_btn.pack(side=tk.LEFT, padx=10)
 
         # 日志区域
-        log_frame = ttk.LabelFrame(main_frame, text="运行日志", padding="10")
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        log_frame = ttk.LabelFrame(main_frame, text="运行日志", padding="15")
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        self.log_text = tk.Text(log_frame, height=8, state=tk.DISABLED)
+        self.log_text = tk.Text(
+            log_frame,
+            height=10,
+            state=tk.DISABLED,
+            font=log_font,
+        )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
         scrollbar = ttk.Scrollbar(self.log_text, command=self.log_text.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_text.config(yscrollcommand=scrollbar.set)
 
-    def _create_form(self, parent, var_name, label_text, default_value):
+    def _copy_url(self):
+        """复制服务地址到剪贴板"""
+        url = self.url_var.get()
+        if url:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(url)
+            self.root.update()  # 更新剪贴板
+            messagebox.showinfo("提示", "服务地址已复制到剪贴板！")
+
+    def _create_form(self, parent, var_name, label_text, default_value, font):
         """创建表单行"""
         row = ttk.Frame(parent)
-        row.pack(fill=tk.X, pady=2)
+        row.pack(fill=tk.X, pady=5)
 
-        ttk.Label(row, text=label_text, width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Label(row, text=label_text, width=18, font=font).pack(side=tk.LEFT, padx=5)
 
         var = tk.IntVar(value=default_value)
-        entry = ttk.Entry(row, textvariable=var, width=10)
+        entry = ttk.Entry(row, textvariable=var, width=12, font=font)
         entry.pack(side=tk.LEFT, padx=5)
         self.config_vars[var_name] = var
 
@@ -147,11 +205,16 @@ class TouchpadGUI:
             self.url_var.set(self.app.http_url if self.app else "")
             self.start_btn.config(state=tk.DISABLED)
             self.stop_btn.config(state=tk.NORMAL)
+            self.copy_btn.pack(side=tk.RIGHT, padx=5)
+            self.instruction_label.pack(side=tk.LEFT, padx=5, pady=5)
+
         else:
             self.status_var.set("未启动")
             self.url_var.set("")
             self.start_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.DISABLED)
+            self.copy_btn.pack_forget()
+            self.instruction_label.pack_forget()
 
     def _log(self, message):
         """记录日志"""
