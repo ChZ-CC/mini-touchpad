@@ -9,9 +9,8 @@ import asyncio
 import threading
 from datetime import datetime
 from touchpad.app import TouchpadApplication
-from touchpad.config import config
-from touchpad.utils import get_local_ip
 from touchpad.log import get_logger
+from touchpad.config import Config, config
 
 logger = get_logger(__name__)
 
@@ -19,7 +18,7 @@ logger = get_logger(__name__)
 class TouchpadGUI:
     """触控板服务界面"""
 
-    def __init__(self, root):
+    def __init__(self, root, config: Config = config):
         self.root = root
         self.root.title("Touchpad - 手机触控板服务")
         self.root.geometry("600x500")
@@ -29,6 +28,11 @@ class TouchpadGUI:
         self.loop = None
         self.thread = None
         self.running = False
+
+        self.config = config
+        self.config_vars = {}
+        self.status_var = tk.StringVar(value="未启动")
+        self.url_var = tk.StringVar(value="")
 
         self._create_widgets()
         self._update_status()
@@ -46,7 +50,6 @@ class TouchpadGUI:
         # 状态行
         status_row = ttk.Frame(status_frame)
         status_row.pack(fill=tk.X, pady=2)
-        self.status_var = tk.StringVar(value="未启动")
         ttk.Label(status_row, text="当前状态:", width=10).pack(side=tk.LEFT, padx=5)
         ttk.Label(
             status_row, textvariable=self.status_var, width=20, foreground="red"
@@ -55,8 +58,46 @@ class TouchpadGUI:
         # IP地址行
         ip_row = ttk.Frame(status_frame)
         ip_row.pack(fill=tk.X, pady=2)
-        self.ip_var = tk.StringVar(value=f"IP地址: {get_local_ip()}")
-        ttk.Label(ip_row, textvariable=self.ip_var).pack(side=tk.LEFT, padx=5)
+        ttk.Label(ip_row, text="服务地址:", width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Label(ip_row, textvariable=self.url_var).pack(side=tk.LEFT, padx=5)
+
+        # 配置区域
+        config_frame = ttk.LabelFrame(main_frame, text="配置信息", padding="10")
+        config_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        # 配置项
+        self._create_form(
+            config_frame,
+            "message_interval",
+            "消息间隔(ms)",
+            self.config.message_interval,
+        )
+        self._create_form(
+            config_frame,
+            "click_threshold",
+            "点击阈值(像素)",
+            self.config.click_threshold,
+        )
+        self._create_form(
+            config_frame,
+            "http_port",
+            "HTTP端口",
+            self.config.http_port,
+        )
+        self._create_form(
+            config_frame,
+            "websocket_port",
+            "WebSocket端口",
+            self.config.websocket_port,
+        )
+
+        # 调试模式
+        debug_frame = ttk.Frame(config_frame)
+        debug_frame.pack(fill=tk.X, pady=2)
+
+        ttk.Label(debug_frame, text="调试模式", width=15).pack(side=tk.LEFT, padx=5)
+        self.debug_var = tk.BooleanVar(value=self.config.debug_mode)
+        ttk.Checkbutton(debug_frame, variable=self.debug_var).pack(side=tk.LEFT, padx=5)
 
         # 控制按钮区域
         control_frame = ttk.Frame(main_frame)
@@ -76,44 +117,6 @@ class TouchpadGUI:
         )
         self.stop_btn.pack(side=tk.LEFT, padx=5)
 
-        # 配置区域
-        config_frame = ttk.LabelFrame(main_frame, text="配置信息", padding="10")
-        config_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-
-        # 配置项
-        config_items = [
-            ("消息间隔(ms)", "message_interval", 1, 100, 1),
-            ("点击阈值(像素)", "click_threshold", 1, 50, 1),
-            ("HTTP端口", "http_port", 1024, 65535, 1),
-            ("WebSocket端口", "websocket_port", 1024, 65535, 1),
-        ]
-
-        self.config_vars = {}
-        for i, (label, config_name, min_val, max_val, step) in enumerate(config_items):
-            row = ttk.Frame(config_frame)
-            row.pack(fill=tk.X, pady=2)
-
-            ttk.Label(row, text=label, width=15).pack(side=tk.LEFT, padx=5)
-
-            var = tk.DoubleVar(value=getattr(config, config_name))
-            self.config_vars[config_name] = var
-
-            entry = ttk.Entry(row, textvariable=var, width=10)
-            entry.pack(side=tk.LEFT, padx=5)
-
-        # 调试模式
-        debug_frame = ttk.Frame(config_frame)
-        debug_frame.pack(fill=tk.X, pady=2)
-
-        ttk.Label(debug_frame, text="调试模式", width=15).pack(side=tk.LEFT, padx=5)
-        self.debug_var = tk.BooleanVar(value=config.debug_mode)
-        ttk.Checkbutton(debug_frame, variable=self.debug_var).pack(side=tk.LEFT, padx=5)
-
-        # 应用配置按钮
-        ttk.Button(config_frame, text="应用配置", command=self.apply_config).pack(
-            pady=10
-        )
-
         # 日志区域
         log_frame = ttk.LabelFrame(main_frame, text="运行日志", padding="10")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -125,15 +128,28 @@ class TouchpadGUI:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_text.config(yscrollcommand=scrollbar.set)
 
+    def _create_form(self, parent, var_name, label_text, default_value):
+        """创建表单行"""
+        row = ttk.Frame(parent)
+        row.pack(fill=tk.X, pady=2)
+
+        ttk.Label(row, text=label_text, width=15).pack(side=tk.LEFT, padx=5)
+
+        var = tk.IntVar(value=default_value)
+        entry = ttk.Entry(row, textvariable=var, width=10)
+        entry.pack(side=tk.LEFT, padx=5)
+        self.config_vars[var_name] = var
+
     def _update_status(self):
         """更新服务状态"""
         if self.running:
             self.status_var.set("运行中")
-            self.status_var.set("运行中")
+            self.url_var.set(self.app.http_url if self.app else "")
             self.start_btn.config(state=tk.DISABLED)
             self.stop_btn.config(state=tk.NORMAL)
         else:
             self.status_var.set("未启动")
+            self.url_var.set("")
             self.start_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.DISABLED)
 
@@ -176,7 +192,7 @@ class TouchpadGUI:
     def _run_service(self):
         """在线程中运行服务"""
         asyncio.set_event_loop(self.loop)
-        self.app = TouchpadApplication()
+        self.app = TouchpadApplication(config=self.config)
         try:
             self.loop.run_until_complete(self.app.run())
         except Exception as e:
@@ -187,7 +203,7 @@ class TouchpadGUI:
         self.running = True
         self._update_status()
         self._log("服务启动成功")
-        self._log(f"手机浏览器访问: http://{get_local_ip()}:{config.http_port}")
+        self._log(f"手机浏览器访问: {self.url_var.get()}")
 
     def stop_service(self):
         """停止服务"""
@@ -198,8 +214,16 @@ class TouchpadGUI:
         try:
             self._log("正在停止服务...")
 
+            if self.app:
+                if self.loop and self.loop.is_running():
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.app.close(), self.loop
+                    )
+                    # 等待关闭完成
+                    future.result(timeout=5)
+
             # 停止事件循环
-            if self.loop:
+            if self.loop and self.loop.is_running():
                 self.loop.call_soon_threadsafe(self.loop.stop)
 
             # 等待线程结束
@@ -223,22 +247,13 @@ class TouchpadGUI:
         """应用配置"""
         try:
             # 更新配置
-            for config_name, var in self.config_vars.items():
-                value = var.get()
-                if config_name in [
-                    "http_port",
-                    "websocket_port",
-                    "message_interval",
-                    "click_threshold",
-                ]:
-                    value = int(value)
-                setattr(config, config_name, value)
+            self.config.http_port = self.config_vars["http_port"].get()
+            self.config.websocket_port = self.config_vars["websocket_port"].get()
+            self.config.message_interval = self.config_vars["message_interval"].get()
+            self.config.click_threshold = self.config_vars["click_threshold"].get()
 
             # 更新调试模式
-            config.debug_mode = self.debug_var.get()
-
-            self._log("配置已更新")
-            messagebox.showinfo("提示", "配置已更新")
+            self.config.debug_mode = self.debug_var.get()
 
         except Exception as e:
             self._log(f"更新配置失败: {e}")
