@@ -56,14 +56,15 @@ class WebSocketConnection:
         try:
             await self._message_processor()
         except websockets.exceptions.ConnectionClosedError:
-            logger.debug(f"[handle] 连接异常关闭: {websocket.remote_address}")
+            logger.info(f"[handle] 连接异常关闭: {websocket.remote_address}")
         except (ConnectionResetError, OSError) as e:
-            # 处理网络异常（如WinError 64：指定的网络名不再可用）
-            logger.debug(f"[handle] 网络异常: {e}")
+            logger.info(f"[handle] 网络异常: {e}")
         except Exception as e:
             logger.error(f"[handle] 未处理的异常: {type(e).__name__}: {e}")
         finally:
-            logger.debug(f"[handle] 清理连接资源: {websocket.remote_address}")
+            logger.info(
+                f"[handle] canceling receive_task for {websocket.remote_address}"
+            )
             receiver_task.cancel()
             try:
                 await receiver_task
@@ -71,7 +72,7 @@ class WebSocketConnection:
                 logger.info(f"[handle] receive_task 连接异常关闭, 错误: {e}")
             except asyncio.CancelledError:
                 pass
-            logger.debug(f"[handle] 连接已关闭: {websocket.remote_address}")
+            logger.info(f"[handle] 连接已关闭: {websocket.remote_address}")
 
 
 class WebSocketServer:
@@ -91,16 +92,29 @@ class WebSocketServer:
         self._server = None
         self._serve_task = None
         self._ssl_context = ssl_context
+        self._stop_event = None  # 用于通知服务器停止的事件
+        self._wss = set()  # 跟踪所有活动连接
+        self.conn = WebSocketConnection(self._message_handler, self._config)
+
+    async def _handle_connection(self, websocket):
+        """处理单个WebSocket连接"""
+        self._wss.add(websocket)
+
+        try:
+            await self.conn.handle(websocket)
+        finally:
+            self._wss.discard(websocket)
 
     async def start(self) -> None:
         """启动WebSocket服务器"""
-        logger.info(f"启动WebSocket服务器: 0.0.0.0:{self._config.websocket_port}")
-        connection = WebSocketConnection(self._message_handler, self._config)
+        logger.info(
+            f"[start] starting websocket server, listening on 0.0.0.0:{self._config.websocket_port}..."
+        )
 
         if self._ssl_context:
-            logger.info("使用 SSL 上下文启动 WSS 服务器")
+            logger.info("[start] ssl enabled, starting WSS server...")
             self._server = await websockets.serve(
-                connection.handle,
+                self._handle_connection,
                 "0.0.0.0",
                 self._config.websocket_port,
                 ping_interval=self._config.ping_interval,
@@ -108,9 +122,9 @@ class WebSocketServer:
                 ssl=self._ssl_context,  # 启用 SSL
             )
         else:
-            logger.info("启动普通 WebSocket 服务器")
+            logger.info("[start] ssl disabled, starting WebSocket server...")
             self._server = await websockets.serve(
-                connection.handle,
+                self._handle_connection,
                 "0.0.0.0",
                 self._config.websocket_port,
                 ping_interval=self._config.ping_interval,
@@ -118,30 +132,63 @@ class WebSocketServer:
             )
 
         self._serve_task = asyncio.create_task(self._server.serve_forever())
-        stop = asyncio.get_running_loop().create_future()
+        logger.info("[start] serve_forever task created")
+        self._stop_event = asyncio.Event()  # 创建停止事件
+        logger.info("[start] stop event created")
+
         try:
-            await stop
+            # 等待停止事件被设置
+            await self._stop_event.wait()
         except asyncio.CancelledError:
-            logger.debug("[server] WebSocket服务器已关闭")
-        finally:
-            logger.debug("start cleanup...")
+            logger.debug("[start] cancelled while waiting for stop event")
+        # finally:
+        #     logger.debug("[start] cleanup...")
+        #     await self.cleanup()
+
+    async def close(self) -> None:
+        """主动关闭WebSocket服务器"""
+        logger.info("[close] closing websocket server...")
+
+        # 设置停止事件
+        if self._stop_event:
+            logger.info("[close] sending stop signal to server...")
+            self._stop_event.set()
             await self.cleanup()
+
+        logger.info("[close] websocket server closed")
 
     async def cleanup(self) -> None:
         """关闭WebSocket服务器"""
+        # 优雅地关闭所有客户端连接
+        if self._wss:
+            logger.debug(f"[cleanup] closing {len(self._wss)} client connections...")
+            close_tasks = [
+                asyncio.create_task(ws.close(code=1000, reason="Server shutting down"))
+                for ws in list(self._wss)
+            ]
+            if close_tasks:
+                try:
+                    await asyncio.wait_for(asyncio.gather(*close_tasks), timeout=3)
+                except asyncio.TimeoutError:
+                    logger.warning("[cleanup] 部分连接关闭超时")
+                except Exception as e:
+                    logger.debug(f"[cleanup] 关闭连接时出错: {e}")
+        self._wss.clear()
+
+        # 取消服务任务
         if self._serve_task:
-            logger.debug(f"[cleanup] cancelling server_task...")
+            logger.info(f"[cleanup] cancelling server_task...")
             self._serve_task.cancel()
             try:
-                logger.debug(f"[cleanup] waitting server_task")
                 await asyncio.wait_for(self._serve_task, timeout=2)
             except asyncio.CancelledError:
                 logger.info("[cleanup] server_task cancelled")
             except asyncio.TimeoutError:
                 logger.info(
-                    f"[cleanup] server_task timeout. cancelled={self._serve_task.cancelled()}"
+                    f"[cleanup] timeout while cancelling server_task. cancelled={self._serve_task.cancelled()}"
                 )
 
+        # 关闭服务器
         if self._server:
             logger.debug("[cleanup] closing server")
             self._server.close()
@@ -149,9 +196,12 @@ class WebSocketServer:
                 await asyncio.wait_for(self._server.wait_closed(), timeout=2)
             except asyncio.TimeoutError:
                 logger.info("[cleanup] server close timeout")
-                pass
+
             self._server = None
             self._serve_task = None
+            self._wss.clear()
+
+        logger.info("[cleanup] websocket server cleanup complete")
 
 
 def health_check(connection, request):

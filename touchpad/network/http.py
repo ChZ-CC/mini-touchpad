@@ -8,6 +8,7 @@ from http.server import HTTPServer as StdlibHTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 from typing import Optional
 from touchpad.log import get_logger
+from touchpad.utils import get_local_ip
 
 logger = get_logger(__name__)
 
@@ -52,9 +53,10 @@ class HTTPServer:
         self._thread: Optional[Thread] = None
         self._ssl_context = ssl_context
 
-    def start(self) -> None:
+    def start(self) -> str:
         """启动HTTP/HTTPS服务器"""
-        logger.info(f"[http_server] 启动HTTP服务器: {self._host}:{self._port}")
+        ip = f"{self._host}:{self._port}"
+        logger.info(f"[start] starting http server, listening on {ip}...")
         self._server = StdlibHTTPServer((self._host, self._port), HTTPRequestHandler)
 
         if self._ssl_context:
@@ -65,14 +67,19 @@ class HTTPServer:
         self._thread = Thread(target=self._server.serve_forever)
         self._thread.daemon = True
         self._thread.start()
+        logger.info("[start] http server started")
+        local_ip = f"{get_local_ip()}:{self._port}"  # 获取本地IP地址
+        return f"https://{local_ip}" if self._ssl_context else f"http://{local_ip}"
 
     def stop(self) -> None:
         """停止HTTP服务器"""
-        logger.info("[http_server] 停止HTTP服务器")
+        logger.info("[stop] stopping http server...")
         if self._server:
             self._server.shutdown()
             if self._thread:
                 self._thread.join()
+
+        logger.info("[stop] http server stopped")
 
 
 def load_html_content(file_path: str = "static/touchpad.html") -> str:

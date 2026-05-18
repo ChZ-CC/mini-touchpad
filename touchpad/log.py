@@ -37,7 +37,7 @@ class Logger:
         file_handler = cls.windows_compatible_handler(log_dir / "touchpad.log")
         file_handler.setLevel(config.log_level)
         file_formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
         file_handler.setFormatter(file_formatter)
@@ -46,7 +46,9 @@ class Logger:
         # 控制台处理器
         console_handler = logging.StreamHandler()
         console_handler.setLevel(config.log_level)
-        console_formatter = logging.Formatter("%(levelname)s - %(message)s")
+        console_formatter = logging.Formatter(
+            "%(levelname)s - %(name)s:%(lineno)d - %(message)s"
+        )
         console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)
 
