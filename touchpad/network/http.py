@@ -3,10 +3,12 @@
 提供HTTP/HTTPS服务，用于提供前端页面。
 """
 
+import os
 import ssl
 from http.server import HTTPServer as StdlibHTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 from typing import Optional
+from touchpad.config import BASE_DIR
 from touchpad.log import get_logger
 from touchpad.utils import get_local_ip
 
@@ -78,11 +80,13 @@ class HTTPServer:
             self._server.shutdown()
             if self._thread:
                 self._thread.join()
+            self._server.server_close()
 
         logger.info("[stop] http server stopped")
 
 
 def load_html_content(file_path: str = "static/touchpad.html") -> str:
+    file_path = os.path.join(BASE_DIR, file_path)
     with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
 

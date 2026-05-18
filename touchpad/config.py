@@ -9,6 +9,8 @@ from typing import Final
 
 import dotenv
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 class Config:
     """配置管理类"""
@@ -39,8 +41,12 @@ class Config:
             "1",
             "t",
         ]
-        self.ssl_cert_file: str = os.getenv("SSL_CERT_FILE", "cert.pem")
-        self.ssl_key_file: str = os.getenv("SSL_KEY_FILE", "key.pem")
+        self.ssl_cert_file: str = os.path.join(
+            BASE_DIR, os.getenv("SSL_CERT_FILE", "cert.pem")
+        )
+        self.ssl_key_file: str = os.path.join(
+            BASE_DIR, os.getenv("SSL_KEY_FILE", "key.pem")
+        )
         self.debug_mode: bool = os.getenv("DEBUG_MODE", "false") in [
             "True",
             "true",
