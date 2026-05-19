@@ -283,7 +283,7 @@
         }
 
         // 重连WebSocket
-        window.reconnect = function () {
+        window.reconnect = function (immediate = false) {
             if (isManualClose) {
                 log(`[reconnect] 手动关闭状态，跳过重连`, 'DEBUG');
                 return; // 如果是手动关闭，则不重连
@@ -291,6 +291,12 @@
             if (isReconnecting) {
                 log(`[reconnect] 正在重连中，跳过重复触发`, 'DEBUG');
                 return; // 如果正在重连中，则不重复触发
+            }
+            if (immediate) {
+                log(`[reconnect] 立即重连`, 'DEBUG');
+                ws = createWebSocket();
+                setupWebSocketHandlers();
+                return;
             }
 
             isReconnecting = true; // 标记为正在重连
@@ -359,7 +365,7 @@
                 setTimeout(() => {
                     if (ws.readyState !== WebSocket.OPEN) {
                         log(`[visibilitychange] 页面恢复可见，连接未打开，执行重连`, 'INFO');
-                        reconnect();
+                        reconnect(true);
                     }
                 }, 1000);
             }
