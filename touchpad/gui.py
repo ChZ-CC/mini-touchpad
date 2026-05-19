@@ -3,6 +3,7 @@
 提供启动和停止服务功能，以及配置信息的修改。
 """
 
+import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
 import asyncio
@@ -10,6 +11,7 @@ import threading
 from datetime import datetime
 from touchpad.app import TouchpadApplication
 from touchpad.log import get_logger
+from touchpad.log import GuiLogHandler
 from touchpad.config import Config, config
 
 logger = get_logger(__name__)
@@ -33,6 +35,10 @@ class TouchpadGUI:
         self.config_vars = {}
         self.status_var = tk.StringVar(value="未启动")
         self.url_var = tk.StringVar(value="")
+
+        # 存储GUI日志处理器引用
+        self.gui_logger = None
+        self.gui_handler = GuiLogHandler(self._log, level=logging.DEBUG)
 
         self._create_widgets()
         self._update_status()
@@ -127,11 +133,11 @@ class TouchpadGUI:
 
         # 调试模式
         debug_frame = ttk.Frame(config_frame)
-        debug_frame.pack(fill=tk.X, pady=5)
+        # debug_frame.pack(fill=tk.X, pady=5)
 
         debug_label = ttk.Label(debug_frame, text="调试模式", width=18, font=text_font)
         debug_label.pack(side=tk.LEFT, padx=5)
-        self.debug_var = tk.BooleanVar(value=self.config.debug_mode)
+        self.debug_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(debug_frame, variable=self.debug_var).pack(side=tk.LEFT, padx=5)
 
         # 控制按钮区域
@@ -256,10 +262,13 @@ class TouchpadGUI:
         """在线程中运行服务"""
         asyncio.set_event_loop(self.loop)
         self.app = TouchpadApplication(config=self.config)
-        try:
+        if self.loop:
             self.loop.run_until_complete(self.app.run())
-        except Exception as e:
-            self._log(f"服务运行出错: {e}")
+
+    def _log_from_app(self, message):
+        """从应用接收日志消息"""
+        # 由于这是从另一个线程调用的，需要使用after方法确保在主线程中执行
+        self.root.after(0, lambda: self._log(message))
 
     def _update_after_start(self):
         """启动后的状态更新"""
@@ -304,7 +313,6 @@ class TouchpadGUI:
 
         except Exception as e:
             self._log(f"停止服务失败: {e}")
-            messagebox.showerror("错误", f"停止服务失败: {e}")
 
     def apply_config(self):
         """应用配置"""
@@ -315,8 +323,11 @@ class TouchpadGUI:
             self.config.message_interval = self.config_vars["message_interval"].get()
             self.config.click_threshold = self.config_vars["click_threshold"].get()
 
-            # 更新调试模式
-            self.config.debug_mode = self.debug_var.get()
+            if self.debug_var.get():
+                self.gui_logger = get_logger("touchpad")
+                self.gui_logger.addHandler(self.gui_handler)
+            elif self.gui_logger:
+                self.gui_logger.removeHandler(self.gui_handler)
 
         except Exception as e:
             self._log(f"更新配置失败: {e}")

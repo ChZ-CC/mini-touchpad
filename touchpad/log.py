@@ -6,6 +6,8 @@
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Callable
+
 from touchpad.config import config
 
 
@@ -23,7 +25,7 @@ class Logger:
         logger.setLevel(config.log_level)
 
         # 阻止日志传播到父 logger，避免重复记录
-        logger.propagate = False
+        logger.propagate = True
 
         # 避免重复添加处理器
         if logger.handlers:
@@ -94,6 +96,56 @@ class Logger:
             encoding="utf-8",
             delay=True,  # 延迟打开文件直到第一次写入
         )
+
+    @classmethod
+    def add_handler(
+        cls,
+        logger_instance,
+        handler: logging.Handler,
+    ):
+        """为指定的日志记录器添加处理器
+
+        Args:
+            logger_instance: 日志记录器实例
+            handler: 日志处理器
+        """
+        # 添加处理器到日志记录器
+        logger_instance.addHandler(handler)
+        return handler
+
+    @classmethod
+    def remove_handler(cls, logger_instance, gui_handler):
+        """从指定的日志记录器移除GUI处理器
+
+        Args:
+            logger_instance: 日志记录器实例
+            gui_handler: GUI日志处理器
+        """
+        if logger_instance and gui_handler:
+            logger_instance.removeHandler(gui_handler)
+
+
+class GuiLogHandler(logging.Handler):
+    """GUI日志处理器，将日志发送到GUI组件"""
+
+    def __init__(self, log_callback: Callable[[str], None], level: int = logging.INFO):
+        super().__init__()
+        self.log_callback = log_callback
+        self.setLevel(level)
+        gui_formatter = logging.Formatter(
+            "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        self.setFormatter(gui_formatter)
+
+    def emit(self, record):
+        """发送日志记录到GUI"""
+        try:
+            msg = self.format(record)
+            # 在主线程中调用GUI回调函数
+            self.log_callback(msg)
+        except Exception:
+            self.handleError(record)
 
 
 def get_logger(name: str = "touchpad") -> logging.Logger:
