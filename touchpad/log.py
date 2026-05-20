@@ -5,6 +5,7 @@
 
 import logging
 from logging.handlers import RotatingFileHandler
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -32,7 +33,7 @@ class Logger:
             return logger
 
         # 创建日志目录
-        log_dir = Path("logs")
+        log_dir = Path(os.path.join(os.path.dirname(__file__), "..", "logs"))
         log_dir.mkdir(exist_ok=True)
 
         # 文件处理器 - 所有级别都写入文件
